@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     # Email / SMTP (Optional in dev, required in prod)
     SMTP_HOST: str | None = None
     SMTP_PORT: int | None = 587
+
+    @field_validator("SMTP_PORT", mode="before")
+    @classmethod
+    def parse_smtp_port(cls, v):
+        if v == "" or v is None:
+            return 587
+        return int(v)
     SMTP_USERNAME: str | None = None
     SMTP_PASSWORD: str | None = None
     SMTP_FROM_EMAIL: str | None = None
