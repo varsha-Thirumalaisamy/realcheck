@@ -1,0 +1,41 @@
+# REALCHECK AI Environment Configuration
+# Do not commit the actual .env file
+
+ENVIRONMENT=development
+PORT=8000
+HOST=0.0.0.0
+
+DIRECT_URL="postgresql://postgres.zierzynovzklauntkewf:Jonus%409025059194@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
+DATABASE_URL="postgresql://postgres.zierzynovzklauntkewf:Jonus%409025059194@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+SECRET_KEY=REALCHECK_AI_2026_Supabase_Auth_9xK7mP4qL8vN2
+API_KEY=rc_ent_2026_secure
+WALTER_API_KEY=wltr_akOeMlS__ao4sbhYK4dY55l6UTDIfT66NsT15Rt8c6c
+WALTER_API_URL=https://developer-portal.walterwrites.ai/api/detector/
+ILLUMINARTY_API_KEY=
+ILLUMINARTY_API_URL=https://api.illuminarty.ai/v1/image/classify
+
+# Storage
+STORAGE_PROVIDER=local  # or 's3'
+
+# Celery & Redis
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+# AWS_ACCESS_KEY_ID=
+# AWS_SECRET_ACCESS_KEY=
+# AWS_BUCKET_NAME=
+
+# ML Configuration
+ENABLE_DEMO_MODE=true
+
+# Email Configuration (e.g., Gmail SMTP)
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=
+SMTP_FROM_NAME=REALCHECK AI
+FRONTEND_URL=http://localhost:5173
+
+ REALITY_DEFENDER_API_KEY = nOXhyHdwmu8ZJqhj0TALdw==
+

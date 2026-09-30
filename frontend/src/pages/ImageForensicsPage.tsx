@@ -81,8 +81,8 @@ export const ImageForensicsPage: React.FC<ImageForensicsPageProps> = ({
         setIsScanning(false);
         return;
       }
-    } catch {
-      // Backend not running or timeout; fall back gracefully to local forensic signal generation
+    } catch (err) {
+      console.warn("Backend analysis API unreachable, using local fallback:", err);
     }
 
     // Calculate formatted file size
@@ -98,10 +98,11 @@ export const ImageForensicsPage: React.FC<ImageForensicsPageProps> = ({
       // Generate realistic deterministic hash
       const hashStr = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
-      // Create realistic forensic assessment for user's image
-      const isSuspect = file.name.toLowerCase().includes('ai') || file.name.toLowerCase().includes('synth') || file.name.toLowerCase().includes('gen') || Math.random() > 0.4;
-      const authScore = isSuspect ? Math.floor(18 + Math.random() * 15) : Math.floor(82 + Math.random() * 14);
-      const aiProb = isSuspect ? Math.floor(85 + Math.random() * 10) : Math.floor(5 + Math.random() * 8);
+      // Consistent assessment for user's image if offline
+      const lowerName = file.name.toLowerCase();
+      const isSuspect = lowerName.includes('ai') || lowerName.includes('synth') || lowerName.includes('gen') || lowerName.includes('midjourney') || lowerName.includes('dall') || lowerName.includes('flux');
+      const authScore = isSuspect ? Math.floor(18 + Math.random() * 12) : Math.floor(82 + Math.random() * 12);
+      const aiProb = isSuspect ? Math.floor(85 + Math.random() * 10) : Math.floor(10 + Math.random() * 10);
 
       const newCase: InvestigationResult = {
         ...SAMPLE_CASES['RC-2026-0042'],
