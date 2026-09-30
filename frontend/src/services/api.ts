@@ -54,11 +54,6 @@ class ForensicApiService {
     fileOrText?: File | string,
     sampleId?: string
   ): Promise<InvestigationResult> {
-    if (sampleId && SAMPLE_CASES[sampleId]) {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      return SAMPLE_CASES[sampleId];
-    }
-
     const formData = new FormData();
     if (fileOrText instanceof File) {
       formData.append('file', fileOrText);
@@ -75,7 +70,35 @@ class ForensicApiService {
       body: formData,
     });
     if (!res.ok) {
-      throw new Error(`Failed to analyze ${mediaType}`);
+      const errText = await res.text();
+      let errorObj: any = {
+        message: `Failed to analyze ${mediaType} (HTTP ${res.status})`,
+        stage: 'Model Inference',
+        reason: `Failed to analyze ${mediaType} (HTTP ${res.status})`,
+        action: 'Please try again.'
+      };
+      try {
+        const parsed = JSON.parse(errText);
+        if (typeof parsed.detail === 'object' && parsed.detail !== null) {
+          errorObj = {
+            ...errorObj,
+            ...parsed.detail,
+            message: parsed.detail.reason || parsed.detail.error || errorObj.message
+          };
+        } else if (typeof parsed.detail === 'string') {
+          errorObj.message = parsed.detail;
+          errorObj.reason = parsed.detail;
+          if (parsed.detail.includes('REALITY_DEFENDER_API_KEY') || parsed.detail.includes('ILLUMINARTY_API_KEY') || parsed.detail.includes('not configured')) {
+            errorObj.stage = 'Model Loading';
+            errorObj.action = 'Configure backend/.env and restart the backend.';
+          }
+        }
+      } catch {
+        if (errText) errorObj.message = errText;
+      }
+      const customErr = new Error(errorObj.message);
+      (customErr as any).details = errorObj;
+      throw customErr;
     }
     return await res.json();
   }

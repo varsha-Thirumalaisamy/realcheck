@@ -90,3 +90,8 @@ class InvestigationResult(BaseModel):
     why_result_explanation: str
     top_contributing_signals: List[Dict[str, Any]]
     limitations: str
+    model_verification: Optional[Dict[str, Any]] = None
+    annotated_image_url: Optional[str] = None
+    heatmap_image_url: Optional[str] = None
+    structured_response: Optional[Dict[str, Any]] = None
+    pipeline_stages: Optional[List[Dict[str, Any]]] = None

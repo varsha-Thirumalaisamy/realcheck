@@ -17,30 +17,32 @@
 - [2. Problem Statement](#2-problem-statement)
 - [3. Proposed Solution](#3-proposed-solution)
 - [4. Key Features](#4-key-features)
-- [5. Four Media Analysis Engines](#5-four-media-analysis-engines)
-- [6. Explainable AI](#6-explainable-ai)
-- [7. Evidence Fusion](#7-evidence-fusion)
-- [8. Authenticity Assessment](#8-authenticity-assessment)
-- [9. Heatmap Analysis](#9-heatmap-analysis)
-- [10. Video Timeline Analysis](#10-video-timeline-analysis)
-- [11. Audio Spectral Analysis](#11-audio-spectral-analysis)
-- [12. Text Stylometry](#12-text-stylometry)
-- [13. Forensic Reports](#13-forensic-reports)
-- [14. System Architecture](#14-system-architecture)
-- [15. Technology Stack](#15-technology-stack)
-- [16. Project Structure](#16-project-structure)
-- [17. Installation](#17-installation)
-- [18. Frontend Setup](#18-frontend-setup)
-- [19. Backend Setup](#19-backend-setup)
-- [20. Environment Variables](#20-environment-variables)
-- [21. Running the Application](#21-running-the-application)
-- [22. Demo Mode](#22-demo-mode)
-- [23. API Endpoints](#23-api-endpoints)
-- [24. Screenshots & Visual Interface](#24-screenshots--visual-interface)
-- [25. Limitations](#25-limitations)
-- [26. Privacy and Security](#26-privacy-and-security)
-- [27. Future Scope](#27-future-scope)
-- [28. License](#28-license)
+- [5. Implementation Status & Component Classification](#5-implementation-status--component-classification)
+- [6. Evaluation & Benchmarking Suite](#6-evaluation--benchmarking-suite)
+- [7. Four Media Analysis Engines](#7-four-media-analysis-engines)
+- [8. Explainable AI](#8-explainable-ai)
+- [9. Evidence Fusion](#9-evidence-fusion)
+- [10. Authenticity Assessment](#10-authenticity-assessment)
+- [11. Heatmap Analysis](#11-heatmap-analysis)
+- [12. Video Timeline Analysis](#12-video-timeline-analysis)
+- [13. Audio Spectral Analysis](#13-audio-spectral-analysis)
+- [14. Text Stylometry](#14-text-stylometry)
+- [15. Forensic Reports](#15-forensic-reports)
+- [16. System Architecture](#16-system-architecture)
+- [17. Technology Stack](#17-technology-stack)
+- [18. Project Structure](#18-project-structure)
+- [19. Installation](#19-installation)
+- [20. Frontend Setup](#20-frontend-setup)
+- [21. Backend Setup](#21-backend-setup)
+- [22. Environment Variables](#22-environment-variables)
+- [23. Running the Application](#23-running-the-application)
+- [24. Demo Mode](#24-demo-mode)
+- [25. API Endpoints](#25-api-endpoints)
+- [26. Screenshots & Visual Interface](#26-screenshots--visual-interface)
+- [27. Limitations](#27-limitations)
+- [28. Privacy and Security](#28-privacy-and-security)
+- [29. Future Scope](#29-future-scope)
+- [30. License](#30-license)
 
 ---
 
@@ -85,7 +87,68 @@ REALCHECK AI introduces a modular, explainable multi-signal forensic framework:
 
 ---
 
-## 5. Four Media Analysis Engines
+## 5. Implementation Status & Component Classification
+
+To ensure engineering transparency and scientific rigor, the components of REALCHECK AI are explicitly classified into three distinct categories based on codebase inspection:
+
+### A. Real Implementations (Production & Verified Infrastructure)
+- **FastAPI Backend Architecture:** Full modular REST API (`app/main.py`, `app/api/*`) with dependency injection, health checks, and strict Pydantic v2 validation.
+- **Relational Persistence Layer:** SQLite / PostgreSQL database integration via SQLAlchemy ORM with Alembic schema migrations and models (`Investigation`, `User`, `Job`, `Batch`).
+- **Enterprise Security & Auth:** JWT bearer token authentication, secure password hashing (bcrypt), and enterprise API key authorization with role-based access control (RBAC).
+- **Asynchronous Task Queue:** Celery worker + Redis backend architecture for decoupled media processing.
+- **Forensic Report Generator:** Deterministic rendering of printable HTML forensic dockets, structured JSON dockets, and CSV tabular matrices (`app/reports/generator.py`).
+- **Evaluation & Benchmarking Suite:** Pluggable benchmark runner (`backend/evaluation/benchmark.py`), manifest provenance and verification manager (`backend/evaluation/dataset.py`), confidence calibrator (ECE, Brier score, Temperature & Platt scaling in `backend/evaluation/calibration.py`), and test suite (`backend/test_benchmark.py`).
+- **Frontend SPA Cockpit:** Production React 19 + TypeScript client with cybersecurity SOC theme, live API polling, and case dossier management (`frontend/src/`).
+
+### B. Heuristic-Experimental Components (Active Baseline Analytical Engines)
+- **Image Forensic Detector:** Pillow / NumPy computational baseline calculating global pixel variance and EXIF metadata extraction (`app/detectors/image/detector.py`). *Note: Member 1 is developing and fine-tuning the production deep learning vision model to replace this baseline.*
+- **Video Forensic Detector:** OpenCV inter-frame temporal differencing and motion variance metrics (`app/detectors/video/detector.py`).
+- **Audio Forensic Detector:** Librosa acoustic signal processor computing spectral roll-off, spectral centroid, zero-crossing rate, and energy dynamics (`app/detectors/audio/detector.py`).
+- **Text Stylometry Analyzer:** Deterministic token statistics, sentence burstiness, vocabulary entropy, and repetition heuristics (`app/detectors/text/detector.py`).
+- **Evidence Fusion Hub:** Score-spread variance and weighted cross-media Bayesian aggregator (`app/forensics/fusion.py`).
+
+### C. Simulated / In-Development Prototype Components
+- **Pre-Baked Demonstration Cases:** Static mock cases (`SAMPLE_CASES` in frontend, `INVESTIGATIONS_DB` in backend) provided for offline demo previews.
+- **Grad-CAM Saliency Overlays:** Heatmap bounding boxes in demo cases are currently simulated prototype overlays awaiting live neural activation maps from the ML model.
+- **Neural Model Registry Metadata:** Speculative target descriptions in `/api/models` (e.g. "Vision Transformer + Spectral ResNet", "3D-CNN") representing target production checkpoints not yet connected to live model weights.
+- **Official Model Benchmark Metrics:** Currently **Not yet evaluated** pending integration and testing of Member 1's machine learning model.
+
+---
+
+## 6. Evaluation & Benchmarking Suite
+
+The evaluation infrastructure (developed in Phase 1) provides a reproducible benchmark pipeline for measuring actual detector performance without synthetic inflation.
+
+### Benchmark Capabilities
+- **Metrics Calculated:** Accuracy, Precision (PPV), Recall (TPR / Sensitivity), Specificity (TNR), Negative Predictive Value (NPV), F1-Score, and complete Confusion Matrix.
+- **Confidence Calibration:** Expected Calibration Error (ECE), Brier Score, Reliability Curves, and post-hoc Temperature Scaling / Platt Scaling.
+- **Anti-Leakage Protocol:** Calibration parameters are strictly fitted on a dedicated `calibration` split, never on the `test` split.
+- **Dynamic Model Loading:** The benchmark runner loads detector classes dynamically via `--detector`, allowing Member 1's upcoming ML model to plug in seamlessly.
+
+### Current Image Detector Benchmark Status
+| Metric | Baseline Heuristic (Pixel Variance) | Member 1 ML Model (Upcoming) |
+|---|---|---|
+| **Accuracy** | *Pipeline test only (not a model)* | **Not yet evaluated** |
+| **Precision** | *Pipeline test only (not a model)* | **Not yet evaluated** |
+| **Recall** | *Pipeline test only (not a model)* | **Not yet evaluated** |
+| **F1-Score** | *Pipeline test only (not a model)* | **Not yet evaluated** |
+| **Calibration (ECE)**| *Uncalibrated heuristic* | **Not yet evaluated** |
+
+*For complete model details and specifications, see [`docs/MODEL_CARD_IMAGE_DETECTOR.md`](docs/MODEL_CARD_IMAGE_DETECTOR.md).*
+
+### Running Benchmark & Unit Tests
+```bash
+# Run unit tests verifying metric calculations against hand-made test arrays:
+cd backend
+python test_benchmark.py
+
+# Run benchmark runner on an evaluation manifest:
+python -m evaluation.benchmark --manifest evaluation/manifest_template.json --detector app.detectors.image.detector.ImageDetector --split test
+```
+
+---
+
+## 7. Four Media Analysis Engines
 
 | Engine | Core Forensic Signals Analyzed | Primary Focus |
 |---|---|---|
@@ -96,7 +159,7 @@ REALCHECK AI introduces a modular, explainable multi-signal forensic framework:
 
 ---
 
-## 6. Explainable AI
+## 8. Explainable AI
 
 Explainability is the core foundation of REALCHECK AI:
 - **Visual Saliency (Grad-CAM):** Highlights the exact spatial regions contributing to anomaly detection.
@@ -106,7 +169,7 @@ Explainability is the core foundation of REALCHECK AI:
 
 ---
 
-## 7. Evidence Fusion
+## 9. Evidence Fusion
 
 When investigating complex cases, single signals can be inconclusive. REALCHECK AI's **Evidence Fusion Hub**:
 1. Normalizes scores from all active detectors into a calibrated 0–100 scale.
@@ -116,7 +179,7 @@ When investigating complex cases, single signals can be inconclusive. REALCHECK 
 
 ---
 
-## 8. Authenticity Assessment
+## 10. Authenticity Assessment
 
 Each analyzed item receives an assessment profile:
 
@@ -129,7 +192,7 @@ Each analyzed item receives an assessment profile:
 
 ---
 
-## 9. Heatmap Analysis
+## 11. Heatmap Analysis
 
 The Image Forensics workspace features an interactive canvas allowing analysts to:
 - Blend Grad-CAM anomaly heatmaps over original source images with an opacity slider.
@@ -139,7 +202,7 @@ The Image Forensics workspace features an interactive canvas allowing analysts t
 
 ---
 
-## 10. Video Timeline Analysis
+## 12. Video Timeline Analysis
 
 Deepfake video manipulation often leaves temporal footprints. The Video Forensics workspace provides:
 - A frame-by-frame scrubber timeline (`00:00 ─── 00:05 ─── 00:10 ─── 00:15 ─── 00:20`) with color-coded suspicion markers (Green = Normal, Amber = Flagged, Red = Critical Anomaly).
@@ -148,7 +211,7 @@ Deepfake video manipulation often leaves temporal footprints. The Video Forensic
 
 ---
 
-## 11. Audio Spectral Analysis
+## 13. Audio Spectral Analysis
 
 The Audio Authenticity engine provides deep acoustic visualization:
 - Interactive Mel-frequency spectrogram and time-domain waveform oscilloscope.
@@ -157,7 +220,7 @@ The Audio Authenticity engine provides deep acoustic visualization:
 
 ---
 
-## 12. Text Stylometry
+## 14. Text Stylometry
 
 The Text Stylometry engine examines written content for large language model generation patterns:
 - **Burstiness Meter:** Measures variance in sentence lengths and structural complexity (human writing exhibits high burstiness; LLMs exhibit uniform cadence).
@@ -166,7 +229,7 @@ The Text Stylometry engine examines written content for large language model gen
 
 ---
 
-## 13. Forensic Reports
+## 15. Forensic Reports
 
 REALCHECK AI generates structured, exportable reports suitable for legal dossiers, newsroom verification, and security incident response:
 - **Printable HTML Docket:** A formatted layout with header stamps, case UUIDs, file checksums, signal scorecards, and legal disclaimers.
@@ -175,7 +238,7 @@ REALCHECK AI generates structured, exportable reports suitable for legal dossier
 
 ---
 
-## 14. System Architecture
+## 16. System Architecture
 
 ```mermaid
 graph TD
@@ -197,7 +260,7 @@ graph TD
 
 ---
 
-## 15. Technology Stack
+## 17. Technology Stack
 
 ### Frontend
 - **Framework:** React 19, TypeScript
@@ -219,7 +282,7 @@ graph TD
 
 ---
 
-## 16. Project Structure
+## 18. Project Structure
 
 ```
 REALCHECK-AI/
@@ -265,7 +328,7 @@ REALCHECK-AI/
 
 ---
 
-## 17. Installation
+## 19. Installation
 
 ### Prerequisites
 - **Node.js:** v18.0.0 or higher
@@ -280,7 +343,7 @@ cd REALCHECK-AI
 
 ---
 
-## 18. Frontend Setup
+## 20. Frontend Setup
 
 ```bash
 cd frontend
@@ -289,7 +352,7 @@ npm install
 
 ---
 
-## 19. Backend Setup
+## 21. Backend Setup
 
 ```bash
 cd backend
@@ -305,7 +368,7 @@ pip install -r requirements.txt
 
 ---
 
-## 20. Environment Variables
+## 22. Environment Variables
 
 Create `.env` in the project root or configure respective directories using `.env.example`:
 
@@ -325,7 +388,7 @@ ENABLE_DEMO_MODE=true
 
 ---
 
-## 21. Running the Application
+## 23. Running the Application
 
 ### Option A: Using Docker Compose (Recommended)
 ```bash
@@ -352,7 +415,7 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 22. Demo Mode
+## 24. Demo Mode
 
 REALCHECK AI includes a built-in **High-Fidelity Demo Mode**:
 - Pre-loaded with calibrated benchmark cases for all 4 media types (e.g., Deepfake CEO voice clone, Midjourney/FLUX generated portrait, Neural reenactment video, LLM academic essay).
@@ -360,7 +423,7 @@ REALCHECK AI includes a built-in **High-Fidelity Demo Mode**:
 
 ---
 
-## 23. API Endpoints
+## 25. API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -377,7 +440,7 @@ REALCHECK AI includes a built-in **High-Fidelity Demo Mode**:
 
 ---
 
-## 24. Screenshots & Visual Interface
+## 26. Screenshots & Visual Interface
 
 > *Visual inspection views available in the application:*
 - **Overview Dashboard:** Central animated Authenticity Core, active investigation pulse, and pipeline topology.
@@ -389,7 +452,7 @@ REALCHECK AI includes a built-in **High-Fidelity Demo Mode**:
 
 ---
 
-## 25. Limitations
+## 27. Limitations
 
 - **Probabilistic Nature:** Forensic signal scores represent statistical likelihoods, not infallible absolute truth.
 - **Compression Degradation:** Heavy re-compression (e.g., WhatsApp re-encoding, low-bitrate MP3) can diminish high-frequency sensor PRNU and Fourier harmonics.
@@ -398,7 +461,7 @@ REALCHECK AI includes a built-in **High-Fidelity Demo Mode**:
 
 ---
 
-## 26. Privacy and Security
+## 28. Privacy and Security
 
 - **No Permanent Retention in Demo Mode:** Files submitted for live analysis are processed in memory and can be purged immediately.
 - **Cryptographic Hashing:** Every asset is cataloged by its SHA-256 checksum to ensure chain-of-custody verification.
@@ -406,7 +469,7 @@ REALCHECK AI includes a built-in **High-Fidelity Demo Mode**:
 
 ---
 
-## 27. Future Scope
+## 29. Future Scope
 
 - 🚀 **Hardware Acceleration (ONNX / TensorRT):** Direct GPU acceleration for heavy batch video frame inference.
 - 🔗 **Blockchain Provenance Anchoring:** Optional C2PA / Content Credentials cryptographic manifest integration.
@@ -415,7 +478,7 @@ REALCHECK AI includes a built-in **High-Fidelity Demo Mode**:
 
 ---
 
-## 28. License
+## 30. License
 
 Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.
 

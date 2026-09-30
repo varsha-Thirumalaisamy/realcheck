@@ -7,6 +7,7 @@ import math
 from collections import Counter
 
 from ..base import BaseDetector
+from .walter_client import WalterWritesClient
 from ...schemas.forensics import (
     InvestigationResult,
     ForensicSignal,
@@ -17,12 +18,13 @@ from ...schemas.forensics import (
 class TextDetector(BaseDetector):
     _case_counter = 0
 
-    def __init__(self):
+    def __init__(self, walter_client: Optional[WalterWritesClient] = None):
         super().__init__(
             model_name="Text Authenticity & Manipulation Analyzer",
             model_version="v3.0.0",
             input_type="TEXT"
         )
+        self.walter_client = walter_client or WalterWritesClient()
 
     def analyze(self, file_path_or_content: Any, metadata: Optional[Dict[str, Any]] = None) -> InvestigationResult:
         TextDetector._case_counter += 1
@@ -44,8 +46,8 @@ class TextDetector(BaseDetector):
                 file_size=file_size,
                 content_hash=content_hash,
                 assessment="Uncertain",
-                confidence=0.4,
-                why_explanation="Classification: Uncertain\n\nConfidence: 40%\n\nReason:\nText is too short for reliable analysis.",
+                confidence=0.0,
+                why_explanation="Classification: Uncertain\n\nConfidence: 0%\n\nReason:\nText is empty.",
                 signals=[self._create_signal(
                     "Insufficient Text Length",
                     "stylometric",
@@ -78,8 +80,8 @@ class TextDetector(BaseDetector):
                 file_size=file_size,
                 content_hash=content_hash,
                 assessment="Uncertain",
-                confidence=0.4,
-                why_explanation="Classification: Uncertain\n\nConfidence: 40%\n\nReason:\nText is too short for reliable analysis.",
+                confidence=0.15,
+                why_explanation="Classification: Uncertain\n\nConfidence: 15%\n\nReason:\nText is too short for reliable analysis.",
                 signals=[self._create_signal(
                     "Insufficient Text Length",
                     "stylometric",
@@ -167,7 +169,7 @@ class TextDetector(BaseDetector):
         ]
         found_ai_words = sum(1 for p in ai_vocabulary if p in text_content.lower())
         if found_ai_words >= 3:
-            ai_score += 40
+            ai_score += 50
             signals.append(self._create_signal("High density of AI-typical phrasing", "stylometric", 80, 0.4, "Strong", "Suspicious Pattern"))
         elif found_ai_words >= 1 and word_count < 50:
             ai_score += 25
@@ -179,6 +181,23 @@ class TextDetector(BaseDetector):
         if found_contractions >= 2:
             signals.append(self._create_signal("Informal contractions present", "stylometric", 10, 0.1, "Normal", "Within Normal Variance"))
             ai_score = max(0, ai_score - 20)
+
+        # 5. External Neural AI Detection API (e.g., Walter Writes AI) - requires 50+ words
+        if self.walter_client and self.walter_client.is_configured and word_count >= 50:
+            walter_res = self.walter_client.detect_ai(text_content)
+            if walter_res and walter_res.get("status") == "SUCCESS" and walter_res.get("ai_score") is not None:
+                ext_ai_score = float(walter_res["ai_score"])
+                ai_score = max(ai_score, ext_ai_score)
+                sig_strength = "Strong" if ext_ai_score >= 70 else ("Moderate" if ext_ai_score >= 40 else "Normal")
+                sig_status = "Suspicious Pattern" if ext_ai_score >= 50 else "Within Normal Variance"
+                signals.append(self._create_signal(
+                    "External Neural AI Detection (Walter Writes)",
+                    "neural_api",
+                    round(ext_ai_score, 1),
+                    0.5,
+                    sig_strength,
+                    sig_status
+                ))
 
         # Classification Logic
         assessment = "Uncertain"

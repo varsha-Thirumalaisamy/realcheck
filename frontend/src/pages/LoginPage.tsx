@@ -26,7 +26,8 @@ export const LoginPage: React.FC = () => {
     setResendStatus('idle');
     setResendMessage('');
     
-    if (!email) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
       setError('Email is required');
       return;
     }
@@ -45,7 +46,7 @@ export const LoginPage: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: email,
+          email: trimmedEmail,
           password: password,
         }),
       });

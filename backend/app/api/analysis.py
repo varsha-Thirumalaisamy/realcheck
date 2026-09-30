@@ -1,15 +1,60 @@
+import os
+import sys
+import io
+import time
+import tempfile
+import uuid
+from typing import Optional, List
+from PIL import Image
+
+# Ensure stdout and stderr handle utf-8 if supported on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+def safe_print(*args, **kwargs):
+    """Safely print status messages, gracefully falling back if encoding does not support unicode characters."""
+    kwargs.setdefault("flush", True)
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        safe_args = [
+            str(arg).replace("✓", "[OK]").replace("✕", "[X]")
+            for arg in args
+        ]
+        try:
+            print(*safe_args, **kwargs)
+        except Exception:
+            pass
+
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy.orm import Session
-from typing import Optional, List
-import uuid
 
 from ..forensics.fusion import EvidenceFusionHub
-try:
-    from ..detectors.image.neural_detector import NeuralImageDetector
-    ImageDetectorClass = NeuralImageDetector
-except Exception:
-    from ..detectors.image.detector import ImageDetector
-    ImageDetectorClass = ImageDetector
+from ..detectors.image.reality_defender_detector import RealityDefenderImageDetector
+from ..services.reality_defender_client import (
+    RealityDefenderConfigurationError,
+    RealityDefenderAuthenticationError,
+    RealityDefenderRateLimitError,
+    RealityDefenderTimeoutError,
+    RealityDefenderAPIError
+)
+ImageDetectorClass = RealityDefenderImageDetector
+from ..detectors.image.illuminarty_detector import (
+    IlluminartyImageDetector,
+    ModelConfigurationError,
+    ImagePreprocessingError,
+    ModelInferenceError
+)
 from ..detectors.video.detector import VideoDetector
 from ..detectors.audio.detector import AudioDetector
 from ..detectors.text.detector import TextDetector
@@ -64,36 +109,223 @@ async def analyze_image(
     sample_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
-    if sample_id:
-        existing = db.query(Investigation).filter(Investigation.case_id == sample_id).first()
-        if existing:
-            from .cases import db_model_to_pydantic
-            return db_model_to_pydantic(existing)
-        
     import tempfile
     import os
-    
-    file_name = file.filename if file else "uploaded_image.png"
-    size_str = f"{file.size / (1024*1024):.1f} MB" if file and file.size else "2.1 MB"
-    
-    tmp_path = None
-    if file:
-        fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(file_name)[1])
-        with os.fdopen(fd, 'wb') as f:
-            content = await file.read()
-            f.write(content)
-            
+    import time
+    import uuid
+    from PIL import Image
+    from ..detectors.image.illuminarty_detector import (
+        ModelConfigurationError,
+        ImagePreprocessingError,
+        ModelInferenceError
+    )
+
+    if not file:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "stage": "Image Uploaded",
+                "reason": "No image file provided. An uploaded image file is required for genuine neural model inference.",
+                "action": "Select and upload an image file (JPEG, PNG, WEBP).",
+                "requestId": "RC-IMG-NONE"
+            }
+        )
+
+    file_name = file.filename or "uploaded_image.png"
+    request_id = f"RC-IMG-{int(time.time()):08d}-{uuid.uuid4().hex[:6].upper()}"
+
+    # Read uploaded file bytes
+    content = await file.read()
+    file_size_bytes = len(content)
+    size_str = f"{file_size_bytes / (1024*1024):.2f} MB" if file_size_bytes >= 1024*1024 else f"{file_size_bytes / 1024:.2f} KB"
+
+    # Pre-extract dimensions for logging
+    dimensions = "Unknown"
+    mime_type = file.content_type or "image/jpeg"
     try:
-        result = img_detector.analyze(tmp_path, {"file_name": file_name, "file_size": size_str})
-        
+        with Image.open(io.BytesIO(content)) as temp_img:
+            dimensions = f"{temp_img.width}x{temp_img.height}"
+            if temp_img.format:
+                mime_type = Image.MIME.get(temp_img.format, mime_type)
+    except Exception:
+        pass
+
+    # [1/5] Upload received logging
+    safe_print("\n========================================")
+    safe_print("REALCHECK AI INFERENCE")
+    safe_print("========================================")
+    safe_print(f"Request ID: {request_id}")
+    safe_print(f"File: {file_name}")
+    safe_print(f"MIME: {mime_type}")
+    safe_print(f"Size: {file_size_bytes} bytes")
+    safe_print(f"Resolution: {dimensions}\n")
+    safe_print("[1/5] Upload received       ✓")
+
+    tmp_path = None
+    fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(file_name)[1])
+    with os.fdopen(fd, 'wb') as f:
+        f.write(content)
+
+    try:
+        result = img_detector.analyze(
+            tmp_path,
+            metadata={
+                "file_name": file_name,
+                "file_size": size_str,
+                "request_id": request_id
+            }
+        )
+
+        safe_print("[2/5] Model configuration   ✓")
+        safe_print("[3/5] Image preprocessing   ✓")
+        safe_print("[4/5] API inference         ✓")
+        safe_print("[5/5] Result parsing        ✓\n")
+        safe_print(f"Model: {result.model_verification.get('model_name', 'Illuminarty AI Image Classifier')}")
+        safe_print(f"AI Probability: {result.ai_generation_probability:.2f}%")
+        safe_print(f"Processing Time: {result.model_verification.get('inference_time_ms', 0):.1f} ms\n")
+        safe_print("Inference completed successfully.")
+        safe_print("========================================\n")
+
         save_investigation_to_db(result, db)
-        
         _trigger_celery_check("IMAGE", file_name, size_str)
-        
         return result
+
+    except (RealityDefenderConfigurationError, ModelConfigurationError) as mce:
+        safe_print("[2/5] Model configuration   ✕")
+        safe_print(f"Error: {str(mce)}")
+        safe_print("========================================\n")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "stage": "Model Loading",
+                "reason": str(mce),
+                "action": "Configure backend/.env and restart the backend.",
+                "requestId": request_id,
+                "file": {
+                    "name": file_name,
+                    "size": size_str,
+                    "resolution": dimensions
+                }
+            }
+        )
+
+    except ImagePreprocessingError as ipe:
+        safe_print("[2/5] Model configuration   ✓")
+        safe_print("[3/5] Image preprocessing   ✕")
+        safe_print(f"Error: {str(ipe)}")
+        safe_print("========================================\n")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "stage": "Image Preprocessing",
+                "reason": str(ipe),
+                "action": "Please upload a valid JPEG, PNG, or WEBP image file.",
+                "requestId": request_id
+            }
+        )
+
+    except (RealityDefenderAuthenticationError, PermissionError) as pe:
+        safe_print("[2/5] Model configuration   ✓")
+        safe_print("[3/5] Image preprocessing   ✓")
+        safe_print("[4/5] API inference         ✕")
+        safe_print("HTTP Status: 403")
+        safe_print(f"Error: {str(pe)}")
+        safe_print("========================================\n")
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "stage": "Model Inference",
+                "reason": str(pe),
+                "action": "Verify your REALITY_DEFENDER_API_KEY in backend/.env.",
+                "requestId": request_id
+            }
+        )
+
+    except RealityDefenderRateLimitError as rle:
+        safe_print("[2/5] Model configuration   ✓")
+        safe_print("[3/5] Image preprocessing   ✓")
+        safe_print("[4/5] API inference         ✕")
+        safe_print("HTTP Status: 429")
+        safe_print(f"Error: {str(rle)}")
+        safe_print("========================================\n")
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "stage": "Model Inference",
+                "reason": str(rle),
+                "action": "Reality Defender rate limit reached. Try again later.",
+                "requestId": request_id
+            }
+        )
+
+    except RealityDefenderTimeoutError as te:
+        safe_print("[2/5] Model configuration   ✓")
+        safe_print("[3/5] Image preprocessing   ✓")
+        safe_print("[4/5] API inference         ✕")
+        safe_print("HTTP Status: 504")
+        safe_print(f"Error: {str(te)}")
+        safe_print("========================================\n")
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "stage": "Model Inference",
+                "reason": str(te),
+                "action": "Unable to reach Reality Defender inference service. Try again later.",
+                "requestId": request_id
+            }
+        )
+
+    except (RealityDefenderAPIError, ModelInferenceError) as mie:
+        safe_print("[2/5] Model configuration   ✓")
+        safe_print("[3/5] Image preprocessing   ✓")
+        safe_print("[4/5] API inference         ✕")
+        status_c = getattr(mie, "status_code", None) or 500
+        safe_print(f"HTTP Status: {status_c}")
+        safe_print(f"Error: {str(mie)}")
+        safe_print("========================================\n")
+        raise HTTPException(
+            status_code=status_c,
+            detail={
+                "stage": "Model Inference",
+                "reason": str(mie),
+                "action": "Reality Defender service returned an error. Verify network and account status.",
+                "requestId": request_id
+            }
+        )
+
+    except ValueError as ve:
+        # Fallback for unhandled validation errors
+        safe_print("[2/5] Model configuration   ✕")
+        safe_print(f"Error: {str(ve)}")
+        safe_print("========================================\n")
+        stage_name = "Model Loading" if "API key" in str(ve) or "not configured" in str(ve) else "Image Preprocessing"
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "stage": stage_name,
+                "reason": str(ve),
+                "action": "Configure backend/.env and restart the backend.",
+                "requestId": request_id
+            }
+        )
+
+    except Exception as e:
+        print("[4/5] API inference         ✕", flush=True)
+        print(f"Inference FAILED: {str(e)}", flush=True)
+        print("========================================\n", flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "stage": "Model Inference",
+                "reason": f"AI model inference failed: {str(e)}. No mock or fallback result was generated.",
+                "action": "Check backend logs or verify Illuminarty service status.",
+                "requestId": request_id
+            }
+        )
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
 
 @router.post("/analyze/video")
 async def analyze_video(

@@ -102,6 +102,7 @@ export interface InvestigationResult {
   timestamp: string;
 
   ai_generation_probability: number;
+  deepfake_probability?: number;
   manipulation_risk: number;
   forensic_anomaly_score: number;
   metadata_risk_score: number;
@@ -123,6 +124,63 @@ export interface InvestigationResult {
   limitations: string;
   preview_url?: string;
   sample_type?: 'ai' | 'real';
+  annotated_image_url?: string;
+  heatmap_image_url?: string;
+  model_verification?: {
+    model_called: boolean;
+    inference_status: 'SUCCESS' | 'FAILED' | 'PENDING';
+    inference_time_ms: number;
+    model_name: string;
+    model_version: string;
+    weights_path: string;
+    model_path?: string;
+    device: string;
+    input_shape: string;
+    raw_logits: { real: number; fake: number };
+    predicted_class: string;
+    confidence: number;
+    image_sha256?: string;
+    timestamp: string;
+    structured_response?: any;
+    pipeline_stages?: any[];
+  };
+  structured_response?: {
+    success: boolean;
+    requestId: string;
+    file: {
+      name: string;
+      size: number;
+      sizeFormatted?: string;
+      mimeType?: string;
+      width: number;
+      height: number;
+      sha256?: string;
+    };
+    model: {
+      name: string;
+      source: string;
+      endpoint?: string;
+    };
+    inference: {
+      status: string;
+      processingTimeMs: number;
+    };
+    result: {
+      label: string;
+      aiProbability: number;
+      aiProbabilityPercent?: number;
+      confidence?: number;
+    };
+    explanation: {
+      source: string;
+      text: string;
+    };
+  };
+  pipeline_stages?: {
+    stage: string;
+    status: 'success' | 'failed' | 'processing' | 'pending';
+    detail?: string;
+  }[];
 }
 
 export interface CrossMediaFusionResult {

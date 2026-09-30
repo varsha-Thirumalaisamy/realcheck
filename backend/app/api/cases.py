@@ -37,7 +37,10 @@ def db_model_to_pydantic(db_inv: Investigation) -> InvestigationResult:
         heatmap_data=db_inv.heatmap_data,
         why_result_explanation=db_inv.why_result_explanation,
         top_contributing_signals=db_inv.top_contributing_signals or [],
-        limitations=db_inv.limitations
+        limitations=db_inv.limitations,
+        annotated_image_url=db_inv.heatmap_data.get("annotated_image_url") if isinstance(db_inv.heatmap_data, dict) else None,
+        heatmap_image_url=db_inv.heatmap_data.get("heatmap_image_url") if isinstance(db_inv.heatmap_data, dict) else None,
+        model_verification=db_inv.heatmap_data.get("model_verification") if isinstance(db_inv.heatmap_data, dict) else None
     )
 
 @router.get("/")

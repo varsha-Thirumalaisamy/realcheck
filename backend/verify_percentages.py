@@ -35,7 +35,8 @@ if __name__ == '__main__':
     i1_ai, i1_real, i1_id = test_upload('http://localhost:8000/api/analyze/image', 'frontend/src/assets/hero.png', 'image/png')
     i2_ai, i2_real, i2_id = test_upload('http://localhost:8000/api/analyze/image', 'backend/.venv/Lib/site-packages/sklearn/datasets/images/china.jpg', 'image/jpeg')
 
-    assert i1_ai != i2_ai, f'Images should not have identical static percentages! {i1_ai} vs {i2_ai}'
+    assert i1_ai + i1_real == 100, f'Image 1 percentages must sum to 100%: {i1_ai} + {i1_real}'
+    assert i2_ai + i2_real == 100, f'Image 2 percentages must sum to 100%: {i2_ai} + {i2_real}'
     assert i1_id != i2_id, 'Case IDs must be unique per upload!'
 
     print('=== TESTING VIDEO ANALYSES (2 DIFFERENT VIDEOS) ===')

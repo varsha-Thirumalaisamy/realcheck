@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import timedelta
 from typing import Any
 
@@ -89,7 +90,8 @@ def login_user(user_in: UserLogin, db: Session = Depends(get_db)) -> Any:
     """
     OAuth2 compatible token login, getting an access token for future requests.
     """
-    user = db.query(User).filter(User.email == user_in.email).first()
+    cleaned_email = user_in.email.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == cleaned_email).first()
     if not user or not verify_password(user_in.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

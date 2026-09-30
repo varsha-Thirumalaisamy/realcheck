@@ -61,6 +61,7 @@ class NeuralImageDetector(BaseDetector):
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
         # Model instantiation
@@ -170,10 +171,12 @@ class NeuralImageDetector(BaseDetector):
             # Preprocess tensor
             input_tensor = self.transform(pil_img.convert("RGB")).unsqueeze(0).to(self.device)
 
-            # 2. Extract genuine logits and probabilities
+            # 2. Extract genuine logits and probabilities with live timing
+            t_infer_start = time.perf_counter()
             with torch.no_grad():
                 logits = self.model(input_tensor)
                 probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+            inference_time_ms = round((time.perf_counter() - t_infer_start) * 1000.0, 2)
 
             logit_real = float(logits[0, 0].item())
             logit_fake = float(logits[0, 1].item())
@@ -312,12 +315,55 @@ class NeuralImageDetector(BaseDetector):
                 )
             )
 
+            evidence.append(
+                EvidenceCard(
+                    title="Model Verification & Audit Trail",
+                    status="Verified Natural" if prob_fake <= 0.35 else ("Critical Anomaly" if prob_fake >= 0.65 else "Inconclusive"),
+                    score=round(confidence_score * 100, 1),
+                    risk=risk_level,
+                    explanation=f"Live PyTorch model executed ({inference_time_ms:.1f}ms). Weights: {os.path.basename(self.weights_path)}. Device: {self.device}. Logits: [Real: {logit_real:.2f}, Fake: {logit_fake:.2f}].",
+                    category="verification"
+                )
+            )
+
             why_explanation = (
                 f"Neural Image Analysis completed with {confidence_level} confidence ({confidence_score * 100:.1f}%). "
                 f"The deep neural classifier evaluated model logits [Real: {logit_real:.2f}, Fake: {logit_fake:.2f}], "
                 f"yielding an AI-generation probability of {ai_prob:.1f}%. Supporting metadata and texture analysis "
                 f"corroborated the neural assessment."
             )
+
+            # 6. Generate genuine Processed & Annotated Image with model detection marked on it
+            anno_url, heat_url = self.generate_annotated_image(
+                pil_img=pil_img,
+                heatmap=heatmap,
+                regions=regions,
+                assessment=assessment,
+                confidence_score=confidence_score,
+                inference_time_ms=inference_time_ms,
+                content_hash=content_hash,
+                is_fake=(prob_fake >= 0.5)
+            )
+
+            verification_payload = {
+                "model_called": True,
+                "inference_status": "SUCCESS",
+                "inference_time_ms": inference_time_ms,
+                "model_name": self.model_name,
+                "model_version": self.model_version,
+                "weights_path": f"weights/{os.path.basename(self.weights_path)}",
+                "model_path": f"{self.model_name} (weights/{os.path.basename(self.weights_path)})",
+                "device": str(self.device),
+                "input_shape": "1x3x224x224 (ImageNet Normalized)",
+                "raw_logits": {
+                    "real": round(logit_real, 4),
+                    "fake": round(logit_fake, 4)
+                },
+                "predicted_class": "Authentic (Real)" if prob_fake < 0.5 else "Synthetic (AI-Generated)",
+                "confidence": confidence_score,
+                "image_sha256": content_hash,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
 
             return InvestigationResult(
                 case_id=case_id,
@@ -350,13 +396,96 @@ class NeuralImageDetector(BaseDetector):
                     editing_software_indicator=software,
                     hash_sha256=content_hash,
                     metadata_risk_score=meta_risk,
-                    note="Neural classification and supporting metadata directly extracted."
+                    note=f"Neural model ({self.model_name}) verified execution in {inference_time_ms:.1f}ms on {self.device}. Checkpoint: {os.path.basename(self.weights_path)}."
                 ),
                 suspicious_regions=regions,
                 why_result_explanation=why_explanation,
                 top_contributing_signals=[{"signal": s.name, "impact": s.strength, "weight": f"{s.weight*100:.0f}%"} for s in signals],
-                limitations="Trained on FaceForensics++ C23 benchmark; highly compressed or extreme adversarial perturbations may affect confidence."
+                limitations="Trained on FaceForensics++ C23 benchmark; highly compressed or extreme adversarial perturbations may affect confidence.",
+                model_verification=verification_payload,
+                annotated_image_url=anno_url if anno_url else None,
+                heatmap_image_url=heat_url if heat_url else None
             )
+
+    def generate_annotated_image(
+        self,
+        pil_img: Image.Image,
+        heatmap: np.ndarray,
+        regions: List[SuspiciousRegion],
+        assessment: str,
+        confidence_score: float,
+        inference_time_ms: float,
+        content_hash: str,
+        is_fake: bool
+    ) -> Tuple[str, str]:
+        """
+        Generates an annotated image with the model's actual Grad-CAM activations,
+        detection bounding boxes, and forensic verification banner burned into the image.
+        Returns (annotated_data_url, heatmap_data_url).
+        """
+        try:
+            from PIL import ImageDraw, ImageFont
+
+            orig_w, orig_h = pil_img.size
+            cam_pil = Image.fromarray((heatmap * 255).astype(np.uint8), mode="L")
+            cam_resized = cam_pil.resize((orig_w, orig_h), resample=Image.Resampling.BILINEAR)
+            cam_norm = np.array(cam_resized, dtype=np.float32) / 255.0
+
+            # Jet-like colormap
+            v = np.clip(cam_norm, 0.0, 1.0)
+            r = np.clip(1.5 - np.abs(4.0 * v - 3.0), 0.0, 1.0)
+            g = np.clip(1.5 - np.abs(4.0 * v - 2.0), 0.0, 1.0)
+            b = np.clip(1.5 - np.abs(4.0 * v - 1.0), 0.0, 1.0)
+            cam_rgb = (np.stack([r, g, b], axis=-1) * 255).astype(np.uint8)
+            heatmap_img = Image.fromarray(cam_rgb, mode="RGB")
+
+            # Pure heatmap data URL
+            buf_heat = io.BytesIO()
+            heatmap_img.save(buf_heat, format="JPEG", quality=85)
+            heat_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf_heat.getvalue()).decode('utf-8')}"
+
+            # Blend heatmap with original image
+            blended = Image.blend(pil_img.convert("RGB"), heatmap_img, alpha=0.48)
+            draw = ImageDraw.Draw(blended)
+            font = ImageFont.load_default()
+
+            accent_color = (239, 68, 68) if is_fake else (0, 240, 255)
+            badge_bg = (200, 30, 30) if is_fake else (0, 150, 180)
+
+            for reg in regions:
+                coords = reg.coordinates
+                x0 = int(coords["x"] / 100.0 * orig_w)
+                y0 = int(coords["y"] / 100.0 * orig_h)
+                x1 = int((coords["x"] + coords["width"]) / 100.0 * orig_w)
+                y1 = int((coords["y"] + coords["height"]) / 100.0 * orig_h)
+
+                x0, y0 = max(0, x0), max(0, y0)
+                x1, y1 = min(orig_w - 1, x1), min(orig_h - 1, y1)
+
+                if x1 > x0 and y1 > y0:
+                    draw.rectangle([x0, y0, x1, y1], outline=accent_color, width=3)
+                    label_text = f"DETECTION: {reg.label} ({int(reg.confidence * 100)}%)"
+                    draw.rectangle([x0, max(0, y0 - 18), min(orig_w, x0 + len(label_text) * 7 + 8), y0], fill=badge_bg)
+                    draw.text((x0 + 4, max(2, y0 - 16)), label_text, fill=(255, 255, 255), font=font)
+
+            # Forensic verification banner across top
+            banner_h = 24
+            draw.rectangle([0, 0, orig_w, banner_h], fill=(10, 16, 26))
+            banner_text = (
+                f"REALCHECK AI NEURAL ENGINE | {self.model_name} | "
+                f"VERDICT: {assessment.upper()} ({confidence_score*100:.1f}%) | "
+                f"INFERENCE: {inference_time_ms:.1f}ms | HASH: {content_hash[:12]}"
+            )
+            draw.text((8, 6), banner_text, fill=(0, 240, 255), font=font)
+
+            buf_anno = io.BytesIO()
+            blended.save(buf_anno, format="JPEG", quality=88)
+            anno_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf_anno.getvalue()).decode('utf-8')}"
+
+            return anno_b64, heat_b64
+        except Exception as e:
+            print(f"Annotated image generation failed (fallback to None): {e}")
+            return "", ""
 
     def explain(self, result: InvestigationResult) -> Dict[str, Any]:
         return {

@@ -27,13 +27,13 @@ class TestDatabaseConfig(unittest.TestCase):
         Base.metadata.drop_all(bind=engine)
 
     def test_postgresql_configuration_validation(self):
-        settings = Settings(DATABASE_URL="postgresql://user:password@localhost:5432/realcheck")
+        settings = Settings(DATABASE_URL="postgresql+psycopg2://user:password@localhost:5432/realcheck")
         engine = create_engine(
             settings.DATABASE_URL,
             connect_args={"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {},
             pool_pre_ping=True
         )
-        self.assertEqual(engine.url.drivername, "postgresql")
+        self.assertEqual(engine.url.drivername, "postgresql+psycopg2")
         # connect_args should not contain check_same_thread for postgres
         self.assertNotIn("check_same_thread", getattr(engine, 'connect_args', {}))
         

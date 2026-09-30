@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 
+from ..core.config import settings
 from ..forensics.c2pa_verifier import C2PAVerifier
 from ..core.batch_worker import process_batch_task
 from ..core.database import get_db
@@ -19,8 +20,9 @@ API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 def verify_api_key(api_key: str = Depends(api_key_header)):
-    # Simple static API key for demonstration
-    if api_key != "rc_ent_2026_secure":
+    # Verify against configured environment variable keys with backward-compatible fallback
+    valid_keys = {k for k in [settings.API_KEY, settings.WALTER_API_KEY, "rc_ent_2026_secure"] if k}
+    if not api_key or api_key not in valid_keys:
         raise HTTPException(status_code=401, detail="Invalid or missing API Key")
     return api_key
 
