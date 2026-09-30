@@ -1,0 +1,124 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+package-lock.json.log
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing and Type Checking
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Next / Frontend Build Artifacts
+dist/
+dist-ssr/
+build/
+.next/
+out/
+*.tsbuildinfo
+.eslintcache
+
+# Environment & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+*.pem
+*.key
+*.cert
+*.crt
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs & Temporary Files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+temp/
+
+# Uploaded Files & Generated Reports (preserve folders with .gitkeep)
+uploads/*
+!uploads/.gitkeep
+reports/generated/*
+!reports/generated/.gitkeep
+
+# Machine Learning & AI Model Binaries / Checkpoints
+*.pt
+*.pth
+*.onnx
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.bin
+*.weights
+*.safetensors
+*.ckpt
+
+# Databases & Local Data
+*.db
+*.sqlite
+*.sqlite3
+
+# Scratch & Local Test Artifacts
+scratch/
+frontend/scratch/
+backend/test_dummy.jpg
+backend/batch_1.jpg
+backend/batch_2.mp4
+backend/test.wav
+batch_1.jpg
+batch_2.mp4
