@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Evaluation Manifest Template for RealCheck AI Benchmark Suite",
+  "rules": {
+    "ground_truth_encoding": {
+      "0": "Real / Authentic Digital Image",
+      "1": "AI-Generated / Synthetic Digital Image"
+    },
+    "splits": ["calibration", "test"],
+    "label_verification": "label_verified must strictly default to false until human or cryptographic proof validates provenance."
+  },
+  "total_samples": 2,
+  "samples": [
+    {
+      "id": "SAMPLE-REAL-001",
+      "file_path": "path/to/authentic_image.jpg",
+      "ground_truth": 0,
+      "source": "RAISE",
+      "license": "CC-BY-NC-4.0",
+      "label_origin": "Nikon-D90-Hardware-Raw-EXIF",
+      "split": "test",
+      "label_verified": false,
+      "metadata": {
+        "camera": "Nikon D90",
+        "iso": 200,
+        "shutter_speed": "1/250"
+      },
+      "notes": "Pending cryptographic hash provenance verification."
+    },
+    {
+      "id": "SAMPLE-AI-001",
+      "file_path": "path/to/synthetic_image.png",
+      "ground_truth": 1,
+      "source": "GenImage",
+      "license": "OpenAccess",
+      "label_origin": "Stable-Diffusion-v1-5-Prompt-Log",
+      "split": "test",
+      "label_verified": false,
+      "metadata": {
+        "generator": "Stable Diffusion v1.5",
+        "guidance_scale": 7.5,
+        "steps": 50
+      },
+      "notes": "Generated from upstream benchmark prompt batch."
+    }
+  ]
+}

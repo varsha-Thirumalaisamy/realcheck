@@ -24,6 +24,7 @@ def db_model_to_pydantic(db_inv: Investigation) -> InvestigationResult:
         disclaimer=db_inv.disclaimer,
         timestamp=db_inv.created_at.isoformat() + "Z" if db_inv.created_at else None,
         ai_generation_probability=db_inv.ai_generation_probability,
+        deepfake_probability=round(db_inv.ai_generation_probability / 100.0, 4) if db_inv.ai_generation_probability is not None else None,
         manipulation_risk=db_inv.manipulation_risk,
         forensic_anomaly_score=db_inv.forensic_anomaly_score,
         metadata_risk_score=db_inv.metadata_risk_score,

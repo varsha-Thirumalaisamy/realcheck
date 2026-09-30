@@ -4,7 +4,12 @@ from typing import Optional, List
 import uuid
 
 from ..forensics.fusion import EvidenceFusionHub
-from ..detectors.image.detector import ImageDetector
+try:
+    from ..detectors.image.neural_detector import NeuralImageDetector
+    ImageDetectorClass = NeuralImageDetector
+except Exception:
+    from ..detectors.image.detector import ImageDetector
+    ImageDetectorClass = ImageDetector
 from ..detectors.video.detector import VideoDetector
 from ..detectors.audio.detector import AudioDetector
 from ..detectors.text.detector import TextDetector
@@ -48,8 +53,8 @@ def save_investigation_to_db(result: InvestigationResult, db: Session):
     db.refresh(db_inv)
 
 # Initialized Detectors
-img_detector = ImageDetector()
-vid_detector = VideoDetector()
+img_detector = ImageDetectorClass()
+vid_detector = VideoDetector(neural_detector=img_detector)
 aud_detector = AudioDetector()
 txt_detector = TextDetector()
 

@@ -70,6 +70,7 @@ class InvestigationResult(BaseModel):
 
     # Probability matrix
     ai_generation_probability: float
+    deepfake_probability: Optional[float] = None
     manipulation_risk: float
     forensic_anomaly_score: float
     metadata_risk_score: float

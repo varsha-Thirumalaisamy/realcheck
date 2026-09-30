@@ -21,6 +21,14 @@ except ImportError:
     except ImportError:
         np = None
 
+from PIL import Image
+
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
 from ..base import BaseDetector
 from ...schemas.forensics import (
     InvestigationResult,
@@ -31,12 +39,23 @@ from ...schemas.forensics import (
 )
 
 class VideoDetector(BaseDetector):
-    def __init__(self):
+    def __init__(self, neural_detector: Optional[Any] = None):
         super().__init__(
             model_name="REALCHECK Temporal Video Engine",
             model_version="v2.5.0-production",
             input_type="VIDEO"
         )
+        self._neural_detector = neural_detector
+
+    @property
+    def neural_detector(self):
+        if self._neural_detector is None:
+            try:
+                from ..image.neural_detector import NeuralImageDetector
+                self._neural_detector = NeuralImageDetector()
+            except Exception:
+                self._neural_detector = False
+        return self._neural_detector if self._neural_detector is not False else None
 
     def analyze(self, file_path_or_content: Any, metadata: Optional[Dict[str, Any]] = None) -> InvestigationResult:
         case_id = f"RC-2026-{int(time.time() % 10000):04d}"
@@ -118,10 +137,12 @@ class VideoDetector(BaseDetector):
                     variances: List[float] = []
                     frame_indices: List[int] = []
                     temporal_deltas: List[Dict[str, Any]] = []
+                    sampled_keyframes: List[np.ndarray] = []
                     
-                    # Sample up to 100 evenly spaced frames
+                    # Sample up to 100 evenly spaced frames for temporal analysis
                     sample_count = min(100, max(10, total_frames))
                     step = max(1, total_frames // sample_count) if total_frames > 0 else 1
+                    keyframe_interval = max(1, sample_count // 8)  # up to 8 keyframes for neural inference
                     frames_processed = 0
                     current_idx = 0
                     
@@ -132,6 +153,9 @@ class VideoDetector(BaseDetector):
                             
                         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                         
+                        if frames_processed % keyframe_interval == 0 and len(sampled_keyframes) < 8:
+                            sampled_keyframes.append(frame.copy())
+
                         if prev_frame is not None:
                             diff = cv2.absdiff(gray, prev_frame)
                             mean_diff = float(np.mean(diff))
@@ -156,6 +180,23 @@ class VideoDetector(BaseDetector):
                         frames_processed += 1
                         
                     cap.release()
+
+                    # Run neural frame inference if neural detector is available
+                    frame_fake_probs: List[float] = []
+                    if self.neural_detector and sampled_keyframes:
+                        for kf in sampled_keyframes:
+                            try:
+                                rgb_kf = cv2.cvtColor(kf, cv2.COLOR_BGR2RGB)
+                                pil_kf = Image.fromarray(rgb_kf)
+                                l = self.neural_detector.get_logits(pil_kf)
+                                if TORCH_AVAILABLE:
+                                    p = torch.softmax(torch.tensor(l), dim=0).numpy()
+                                    frame_fake_probs.append(float(p[1]))
+                            except Exception:
+                                pass
+                    
+                    neural_fake_mean: Optional[float] = float(np.mean(frame_fake_probs)) if frame_fake_probs else None
+                    temporal_anomaly_pct = 15.0
                     
                     # 2. Evaluate Temporal Metrics
                     if len(variances) > 0:
@@ -165,8 +206,8 @@ class VideoDetector(BaseDetector):
                         
                         # Anomaly 1: Unnatural Temporal Smoothing (e.g. generative AI video synthesis)
                         if avg_variance < 1.2:
-                            ai_prob = max(ai_prob, 85.0)
-                            authenticity_score -= 35
+                            temporal_anomaly_pct = 85.0
+                            manip_risk = max(manip_risk, 75.0)
                             findings.append(f"Extremely low inter-frame variance ({avg_variance:.2f}) indicates generative interpolation smoothing characteristic of AI synthesis.")
                             signals.append(
                                 ForensicSignal(
@@ -193,9 +234,9 @@ class VideoDetector(BaseDetector):
                             )
                         # Anomaly 2: High Inter-Frame Jitter / Face-Swap Boundary Discontinuities
                         elif var_of_variance > 45.0 or std_variance > 10.0:
+                            temporal_anomaly_pct = 82.0
                             manip_risk = max(manip_risk, 82.0)
                             forensic_anomaly = max(forensic_anomaly, 78.0)
-                            authenticity_score -= 40
                             findings.append(f"High variance instability ({var_of_variance:.2f}) indicates frame dropping, temporal flickering, or deepfake boundary jitter.")
                             signals.append(
                                 ForensicSignal(
@@ -221,11 +262,13 @@ class VideoDetector(BaseDetector):
                                 )
                             )
                         else:
+                            # Natural continuous camera capture variance
+                            temporal_anomaly_pct = float(np.clip(12.0 + (avg_variance * 0.4), 8.0, 28.0))
                             signals.append(
                                 ForensicSignal(
                                     name="Natural Temporal Continuity",
                                     category="temporal",
-                                    score=18.0,
+                                    score=round(temporal_anomaly_pct, 1),
                                     weight=0.15,
                                     strength="Normal",
                                     status="Within Normal Variance",
@@ -238,56 +281,92 @@ class VideoDetector(BaseDetector):
                                 EvidenceCard(
                                     title="Frame Continuity",
                                     status="Normal",
-                                    score=18.0,
+                                    score=round(temporal_anomaly_pct, 1),
                                     risk="Low Risk",
                                     explanation="Inter-frame delta analysis shows coherent natural motion curves.",
                                     category="temporal"
                                 )
                             )
 
-                        # 3. Detect Suspicious Segments across the Video Timeline
-                        threshold = avg_variance + (1.5 * std_variance) if std_variance > 0 else avg_variance * 1.5
-                        window_duration = max(1.0, duration_sec / 5.0) if duration_sec > 0 else 3.0
-                        
-                        # Cluster high-variance points into timeline segments
-                        current_seg_start: Optional[float] = None
-                        current_seg_end: Optional[float] = None
-                        
-                        for delta in temporal_deltas:
-                            t = delta["timestamp"]
-                            if delta["mean_diff"] > threshold:
-                                if current_seg_start is None:
-                                    current_seg_start = max(0.0, t - 0.5)
-                                current_seg_end = t + 0.5
-                            else:
-                                if current_seg_start is not None and current_seg_end is not None:
-                                    if (current_seg_end - current_seg_start) >= 0.5:
-                                        segments.append(
-                                            SuspiciousTimeSegment(
-                                                start_time=self._format_timecode(current_seg_start),
-                                                end_time=self._format_timecode(current_seg_end),
-                                                start_seconds=round(current_seg_start, 2),
-                                                end_seconds=round(current_seg_end, 2),
-                                                risk_level="High" if manip_risk > 70 else "Amber",
-                                                anomaly_type="Temporal Jitter / Boundary Warp",
-                                                description=f"Significant frame-to-frame delta spike ({delta['mean_diff']:.1f} vs {avg_variance:.1f} baseline)."
-                                            )
-                                        )
-                                    current_seg_start = None
-                                    current_seg_end = None
-                        
-                        if current_seg_start is not None and current_seg_end is not None:
-                            segments.append(
-                                SuspiciousTimeSegment(
-                                    start_time=self._format_timecode(current_seg_start),
-                                    end_time=self._format_timecode(current_seg_end),
-                                    start_seconds=round(current_seg_start, 2),
-                                    end_seconds=round(current_seg_end, 2),
-                                    risk_level="High" if manip_risk > 70 else "Amber",
-                                    anomaly_type="Facial Boundary Artifacts",
-                                    description="Anomalous transition detected near segment boundary."
-                                )
+                    # Neural Frame Signal if frames were processed
+                    if neural_fake_mean is not None:
+                        neural_score = round(neural_fake_mean * 100.0, 1)
+                        is_neural_anomaly = neural_fake_mean >= 0.50
+                        signals.append(
+                            ForensicSignal(
+                                name="Neural Frame Deepfake Analysis",
+                                category="cv",
+                                score=neural_score,
+                                weight=0.50,
+                                strength="Strong" if is_neural_anomaly else "Normal",
+                                status="Anomaly Detected" if is_neural_anomaly else "Within Normal Variance",
+                                explanation=f"Evaluated {len(frame_fake_probs)} video keyframes with fine-tuned EfficientNet-B0 detector (mean fake probability: {neural_score:.1f}%).",
+                                affected_region_or_time="Keyframes",
+                                model_contribution_pct=50.0
                             )
+                        )
+                        evidence.append(
+                            EvidenceCard(
+                                title="Neural Frame Inspection",
+                                status="Elevated Risk" if is_neural_anomaly else "Normal",
+                                score=neural_score,
+                                risk="High Risk" if is_neural_anomaly else "Low Risk",
+                                explanation=f"Sampled frame classification averaged {neural_score:.1f}% deepfake likelihood.",
+                                category="cv"
+                            )
+                        )
+                        combined_score = 0.65 * (neural_fake_mean * 100.0) + 0.35 * temporal_anomaly_pct
+                    else:
+                        combined_score = temporal_anomaly_pct
+
+                    # Unified continuous score
+                    ai_prob = round(float(np.clip(combined_score, 1.0, 99.0)), 1)
+                    deepfake_prob = round(ai_prob / 100.0, 4)
+                    authenticity_score = max(0, min(100, 100 - int(round(ai_prob))))
+
+                    # 3. Detect Suspicious Segments across the Video Timeline
+                    threshold = avg_variance + (1.5 * std_variance) if std_variance > 0 else avg_variance * 1.5
+                    window_duration = max(1.0, duration_sec / 5.0) if duration_sec > 0 else 3.0
+                    
+                    # Cluster high-variance points into timeline segments
+                    current_seg_start: Optional[float] = None
+                    current_seg_end: Optional[float] = None
+                    
+                    for delta in temporal_deltas:
+                        t = delta["timestamp"]
+                        if delta["mean_diff"] > threshold:
+                            if current_seg_start is None:
+                                current_seg_start = max(0.0, t - 0.5)
+                            current_seg_end = t + 0.5
+                        else:
+                            if current_seg_start is not None and current_seg_end is not None:
+                                if (current_seg_end - current_seg_start) >= 0.5:
+                                    segments.append(
+                                        SuspiciousTimeSegment(
+                                            start_time=self._format_timecode(current_seg_start),
+                                            end_time=self._format_timecode(current_seg_end),
+                                            start_seconds=round(current_seg_start, 2),
+                                            end_seconds=round(current_seg_end, 2),
+                                            risk_level="High" if manip_risk > 70 else "Amber",
+                                            anomaly_type="Temporal Jitter / Boundary Warp",
+                                            description=f"Significant frame-to-frame delta spike ({delta['mean_diff']:.1f} vs {avg_variance:.1f} baseline)."
+                                        )
+                                    )
+                                current_seg_start = None
+                                current_seg_end = None
+                    
+                    if current_seg_start is not None and current_seg_end is not None:
+                        segments.append(
+                            SuspiciousTimeSegment(
+                                start_time=self._format_timecode(current_seg_start),
+                                end_time=self._format_timecode(current_seg_end),
+                                start_seconds=round(current_seg_start, 2),
+                                end_seconds=round(current_seg_end, 2),
+                                risk_level="High" if manip_risk > 70 else "Amber",
+                                anomaly_type="Facial Boundary Artifacts",
+                                description="Anomalous transition detected near segment boundary."
+                            )
+                        )
 
                     # 4. Computer Vision & Optical Flow Signal
                     signals.append(
@@ -371,24 +450,26 @@ class VideoDetector(BaseDetector):
         )
 
         # Determine Assessment & Risk Levels
+        if 'deepfake_prob' not in locals():
+            deepfake_prob = round(ai_prob / 100.0, 4)
+            authenticity_score = max(0, min(100, 100 - int(round(ai_prob))))
+
         authenticity_score = max(0, min(100, authenticity_score))
-        if authenticity_score <= 30:
+        confidence_score = round(float(max(deepfake_prob, 1.0 - deepfake_prob)), 2)
+        if ai_prob >= 65.0:
             risk_level = "High Risk"
             assessment = "Likely AI-Manipulated"
-            confidence_level = "High"
-            confidence_score = 0.88
-        elif authenticity_score <= 60:
+            confidence_level = "High" if confidence_score >= 0.8 else "Moderate"
+        elif ai_prob <= 35.0:
+            risk_level = "Low Risk"
+            assessment = "Likely Authentic"
+            confidence_level = "High" if confidence_score >= 0.8 else "Moderate"
+        else:
             risk_level = "Medium Risk"
             assessment = "Uncertain / Mixed Evidence"
             confidence_level = "Moderate"
-            confidence_score = 0.65
-        else:
-            risk_level = "Low Risk"
-            assessment = "Likely Authentic"
-            confidence_level = "High"
-            confidence_score = 0.85
 
-        why_explanation = " ".join(findings) if findings else "Temporal frame differences and optical continuity were evaluated across sampled video frames."
+        why_explanation = " ".join(findings) if findings else "Temporal frame differences, optical continuity, and frame deepfake likelihood were evaluated across sampled video frames."
 
         return InvestigationResult(
             case_id=case_id,
@@ -403,6 +484,7 @@ class VideoDetector(BaseDetector):
             disclaimer="Analysis generated from local computational video frame and temporal signal processing.",
             timestamp=datetime.now(timezone.utc).isoformat(),
             ai_generation_probability=ai_prob,
+            deepfake_probability=deepfake_prob,
             manipulation_risk=manip_risk,
             forensic_anomaly_score=forensic_anomaly,
             metadata_risk_score=meta_risk,
@@ -439,7 +521,7 @@ class VideoDetector(BaseDetector):
             media_type="VIDEO",
             file_name=file_name,
             assessment="Uncertain / Mixed Evidence",
-            authenticity_score=0,
+            authenticity_score=50,
             risk_level="High Risk",
             confidence_level="Low",
             confidence_score=0.20,
@@ -447,6 +529,7 @@ class VideoDetector(BaseDetector):
             disclaimer="Failed to process video stream.",
             timestamp=datetime.now(timezone.utc).isoformat(),
             ai_generation_probability=50.0,
+            deepfake_probability=0.50,
             manipulation_risk=50.0,
             forensic_anomaly_score=50.0,
             metadata_risk_score=90.0,

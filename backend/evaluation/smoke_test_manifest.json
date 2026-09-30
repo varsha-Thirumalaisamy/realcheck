@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Pipeline Smoke Test Manifest - Used strictly for verifying runner execution (NOT for reporting performance)",
+  "total_samples": 3,
+  "samples": [
+    {
+      "id": "SMOKE-001",
+      "file_path": ".venv/Lib/site-packages/sklearn/datasets/images/china.jpg",
+      "ground_truth": 0,
+      "source": "scikit-learn-sample-datasets",
+      "license": "BSD-3-Clause",
+      "label_origin": "Photographic Sample",
+      "split": "test",
+      "label_verified": false,
+      "metadata": {
+        "dimensions": "640x427"
+      },
+      "notes": "Pipeline smoke test sample only."
+    },
+    {
+      "id": "SMOKE-002",
+      "file_path": ".venv/Lib/site-packages/sklearn/datasets/images/flower.jpg",
+      "ground_truth": 0,
+      "source": "scikit-learn-sample-datasets",
+      "license": "BSD-3-Clause",
+      "label_origin": "Photographic Sample",
+      "split": "test",
+      "label_verified": false,
+      "metadata": {
+        "dimensions": "640x427"
+      },
+      "notes": "Pipeline smoke test sample only."
+    },
+    {
+      "id": "SMOKE-003",
+      "file_path": "../frontend/src/assets/hero.png",
+      "ground_truth": 1,
+      "source": "local-ui-asset",
+      "license": "Project-Internal",
+      "label_origin": "Vector / Rendered Graphic",
+      "split": "test",
+      "label_verified": false,
+      "metadata": {
+        "dimensions": "343x361"
+      },
+      "notes": "Pipeline smoke test sample only."
+    }
+  ]
+}
