@@ -1,20 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Play, 
-  Pause, 
-  Upload, 
-  HelpCircle, 
-  FileSpreadsheet, 
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Upload,
+  Play,
+  Pause,
+  HelpCircle,
+  FileSpreadsheet,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Cpu,
   Layers,
-  RotateCcw,
-  AlertTriangle
+  Sparkles,
+  Sliders,
+  Volume2,
+  Activity,
+  Mic,
+  RotateCcw
 } from 'lucide-react';
 import { ScoreMeter } from '../components/ScoreMeter';
-import { EvidenceCardComponent } from '../components/EvidenceCardComponent';
+import { AnalysisResult } from '../components/AnalysisResult';
+import { EvidenceIntegrityCard } from '../components/EvidenceIntegrityCard';
 import { LiveScanAnimation } from '../components/LiveScanAnimation';
 import { WhyThisResultModal } from '../components/WhyThisResultModal';
+import { ForensicPipeline, PipelineStep } from '../components/ForensicPipeline';
 import { SAMPLE_CASES } from '../data/sampleCases';
 import { InvestigationResult } from '../types/forensics';
+import { forensicApi } from '../services/api';
+import { useInvestigation } from '../contexts/InvestigationContext';
 
 interface AudioForensicsPageProps {
   onGenerateReport: (caseId: string) => void;
@@ -27,857 +39,763 @@ export const AudioForensicsPage: React.FC<AudioForensicsPageProps> = ({
   onNavigate,
   initialCaseId = 'RC-2026-0044'
 }) => {
-  const [currentCase, setCurrentCase] = useState<InvestigationResult>(
-    SAMPLE_CASES[initialCaseId] || SAMPLE_CASES['RC-2026-0044']
-  );
+  const { isDemoMode, activeCaseId, setActiveCaseId, generateNewCaseId } = useInvestigation();
+
+  const effectiveInitialCase = (initialCaseId && SAMPLE_CASES[initialCaseId]?.media_type === 'AUDIO')
+    ? SAMPLE_CASES[initialCaseId]
+    : SAMPLE_CASES['RC-2026-0044'];
+
+  const [currentCase, setCurrentCase] = useState<InvestigationResult>(effectiveInitialCase);
   const [uploadedAudioSrc, setUploadedAudioSrc] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isWhyModalOpen, setIsWhyModalOpen] = useState(false);
+  const [activeSample, setActiveSample] = useState<'ai' | 'real' | null>('ai');
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTimeSec, setCurrentTimeSec] = useState<number>(18);
-  const [durationSec, setDurationSec] = useState<number>(28);
-  const [viewMode, setViewMode] = useState<'both' | 'spectrogram' | 'waveform'>('both');
+  const [playProgress, setPlayProgress] = useState(65); // 0-100%
   const [isDragging, setIsDragging] = useState(false);
 
-  const audioRef = useRef<HTMLAudioElement>(null);
+  // Pipeline execution state
+  const [pipelinePhase, setPipelinePhase] = useState<'idle' | 'uploaded' | 'loading' | 'preprocessing' | 'inference' | 'completed' | 'error'>('completed');
+  const [pipelineError, setPipelineError] = useState<{ stage: string; reason: string; action?: string; requestId?: string } | null>(null);
+  const [meta, setMeta] = useState<{ fileName: string; fileSize: string; duration: string }>({
+    fileName: effectiveInitialCase.file_name,
+    fileSize: effectiveInitialCase.metadata?.file_size_formatted || '4.7 MB',
+    duration: '00:28 (PCM 44.1 kHz Stereo)'
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Playback timer if simulated
   useEffect(() => {
-    let interval: any;
-    if (isPlaying && !uploadedAudioSrc) {
-      interval = setInterval(() => {
-        setCurrentTimeSec((prev) => {
-          if (prev >= durationSec) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, 1000);
+    if (activeCaseId && SAMPLE_CASES[activeCaseId] && SAMPLE_CASES[activeCaseId].media_type === 'AUDIO') {
+      setCurrentCase(SAMPLE_CASES[activeCaseId]);
     }
-    return () => clearInterval(interval);
-  }, [isPlaying, uploadedAudioSrc, durationSec]);
+  }, [activeCaseId]);
 
-  const handleSelectSample = (caseId: string) => {
-    if (SAMPLE_CASES[caseId]) {
-      setUploadedAudioSrc(null);
-      setAnalysisError(null);
-      setCurrentCase(SAMPLE_CASES[caseId]);
-      setCurrentTimeSec(caseId === 'RC-2026-0044' ? 18 : 6);
-      setDurationSec(28);
-      setIsPlaying(false);
+  // Audio-specific 6-step Forensic Pipeline
+  const pipelineSteps: PipelineStep[] = [
+    {
+      id: '1',
+      stepNumber: 1,
+      title: 'Audio Ingestion',
+      subtitle: meta.fileName,
+      status: pipelinePhase === 'idle' ? 'pending' : (pipelinePhase === 'uploaded' ? 'processing' : 'success')
+    },
+    {
+      id: '2',
+      stepNumber: 2,
+      title: 'STFT Transformation',
+      subtitle: 'Short-time Fourier transform (128-band)',
+      status: ['idle', 'uploaded'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'loading' ? 'processing' : 'success')
+    },
+    {
+      id: '3',
+      stepNumber: 3,
+      title: 'Mel-Spectrogram',
+      subtitle: 'Log-magnitude mel filterbank',
+      status: ['idle', 'uploaded', 'loading'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'preprocessing' ? 'processing' : 'success')
+    },
+    {
+      id: '4',
+      stepNumber: 4,
+      title: 'Acoustic Analysis',
+      subtitle: 'Pitch micro-jitter & vocal tract resonance',
+      status: ['idle', 'uploaded', 'loading', 'preprocessing'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'inference' ? 'processing' : 'success')
+    },
+    {
+      id: '5',
+      stepNumber: 5,
+      title: 'Voice Signal Analysis',
+      subtitle: 'Neural vocoder phase drift audit',
+      status: pipelinePhase === 'completed' ? 'success' : (pipelinePhase === 'inference' ? 'processing' : 'pending')
+    },
+    {
+      id: '6',
+      stepNumber: 6,
+      title: 'Result Fusion',
+      subtitle: currentCase ? currentCase.assessment : 'Output',
+      status: pipelinePhase === 'completed' ? 'success' : 'pending'
     }
-  };
+  ];
 
-  const processUploadedAudio = (file: File) => {
-    try {
-      const objectUrl = URL.createObjectURL(file);
-      setUploadedAudioSrc(objectUrl);
-      setAnalysisError(null);
-      setIsPlaying(false);
+  // Execute fast deterministic presentation demo (3-5s)
+  const runFastDemoAnalysis = async (targetCaseId: string, customFile?: File) => {
+    setIsScanning(true);
+    setAnalysisError(null);
+    setPipelineError(null);
+    setPipelinePhase('uploaded');
 
-      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
-      const sizeStr = `${sizeMb} MB`;
-      const caseId = `RC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const hashStr = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    const sample = SAMPLE_CASES[targetCaseId] || SAMPLE_CASES['RC-2026-0044'];
+    const caseId = generateNewCaseId('RC-2026-');
+    const newDemoCase: InvestigationResult = {
+      ...sample,
+      case_id: caseId,
+      is_demo_analysis: true,
+      timestamp: new Date().toISOString()
+    };
 
-      const isSuspect = file.name.toLowerCase().includes('clone') || file.name.toLowerCase().includes('synth') || file.name.toLowerCase().includes('ai') || Math.random() > 0.4;
-      const authScore = isSuspect ? Math.floor(20 + Math.random() * 14) : Math.floor(84 + Math.random() * 12);
-      const aiVoiceRisk = isSuspect ? Math.floor(86 + Math.random() * 10) : Math.floor(6 + Math.random() * 8);
-
-      const newCase: InvestigationResult = {
-        ...SAMPLE_CASES['RC-2026-0044'],
-        case_id: caseId,
-        file_name: file.name,
-        sample_type: isSuspect ? 'ai' : 'real',
-        assessment: isSuspect ? 'Likely AI-Generated' : 'Likely Authentic',
-        authenticity_score: authScore,
-        risk_level: authScore <= 30 ? 'High Risk' : (authScore <= 60 ? 'Medium Risk' : 'Low Risk'),
-        confidence_level: 'High',
-        confidence_score: 0.91,
-        ai_generation_probability: aiVoiceRisk,
-        manipulation_risk: isSuspect ? 68.0 : 10.0,
-        forensic_anomaly_score: isSuspect ? 76.0 : 12.0,
-        metadata: {
-          file_name: file.name,
-          file_size_formatted: sizeStr,
-          mime_type: file.type || 'audio/wav',
-          duration: 'Detected stream',
-          creation_time: new Date().toUTCString(),
-          software_signature: file.type.includes('wav') ? 'Broadcast PCM WAV' : 'MPEG Audio Layer',
-          camera_model: undefined,
-          exif_available: false,
-          editing_software_indicator: 'None Detected',
-          hash_sha256: hashStr,
-          metadata_risk_score: 15.0,
-          note: 'Metadata is supporting evidence only and can be altered or removed.'
-        },
-        why_result_explanation: isSuspect
-          ? `Acoustic inspection of ${file.name} identifies neural vocoder harmonic artifacts and absence of human pulmonary breath pauses.`
-          : `Natural speaker vocal fold micro-jitter, physiological breath intakes, and room impulse reverberations corroborate authentic acoustic recording of ${file.name}.`,
-        preview_url: objectUrl
+    if (customFile) {
+      newDemoCase.file_name = customFile.name;
+      newDemoCase.metadata = {
+        ...newDemoCase.metadata,
+        file_name: customFile.name,
+        file_size_formatted: `${(customFile.size / (1024 * 1024)).toFixed(2)} MB`
       };
-
-      setCurrentCase(newCase);
-      setIsScanning(true);
-    } catch {
-      setAnalysisError('Unable to parse audio stream. Please ensure the file is a valid audio format (MP3, WAV, M4A, AAC, OGG).');
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processUploadedAudio(file);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('audio/')) {
-      processUploadedAudio(file);
-    }
-  };
-
-  const togglePlay = () => {
-    if (uploadedAudioSrc && audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
+      setMeta({
+        fileName: customFile.name,
+        fileSize: `${(customFile.size / (1024 * 1024)).toFixed(2)} MB`,
+        duration: '00:28 (PCM 44.1 kHz Stereo)'
+      });
     } else {
-      setIsPlaying(!isPlaying);
+      setMeta({
+        fileName: sample.file_name,
+        fileSize: sample.metadata?.file_size_formatted || '4.7 MB',
+        duration: '00:28 (PCM 44.1 kHz Stereo)'
+      });
+    }
+
+    // Step 1: Ingestion (450ms)
+    await new Promise(r => setTimeout(r, 450));
+    setPipelinePhase('loading');
+
+    // Step 2: STFT (550ms)
+    await new Promise(r => setTimeout(r, 550));
+    setPipelinePhase('preprocessing');
+
+    // Step 3: Mel-Spectrogram (650ms)
+    await new Promise(r => setTimeout(r, 650));
+    setPipelinePhase('inference');
+
+    // Step 4 & 5: Acoustic & Voice Signal Analysis (950ms)
+    await new Promise(r => setTimeout(r, 950));
+
+    // Step 6: Complete!
+    setCurrentCase(newDemoCase);
+    setActiveCaseId(caseId);
+    setPipelinePhase('completed');
+    setIsScanning(false);
+  };
+
+  // Run live backend inference with fallback
+  const runLiveAnalysis = async (file: File) => {
+    setIsScanning(true);
+    setAnalysisError(null);
+    setPipelineError(null);
+    setPipelinePhase('uploaded');
+
+    setMeta({
+      fileName: file.name,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      duration: 'Analyzing acoustic spectrum...'
+    });
+
+    await new Promise(r => setTimeout(r, 300));
+    setPipelinePhase('loading');
+
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT')), 5000);
+      });
+
+      setPipelinePhase('inference');
+      const backendPromise = forensicApi.analyzeMedia('AUDIO', file);
+      const result = await Promise.race([backendPromise, timeoutPromise]);
+
+      if (result && result.case_id) {
+        setCurrentCase(result);
+        setActiveCaseId(result.case_id);
+        setPipelinePhase('completed');
+        setIsScanning(false);
+      } else {
+        throw new Error('Invalid backend response');
+      }
+    } catch (err: any) {
+      setIsScanning(false);
+      setPipelinePhase('error');
+      const isTimeout = err.message === 'TIMEOUT';
+      const reasonMsg = isTimeout
+        ? 'External analysis is taking longer than expected.'
+        : 'External detector unavailable';
+
+      setPipelineError({
+        stage: isTimeout ? 'API Gateway Timeout' : 'Audio Detector',
+        reason: reasonMsg,
+        action: 'You can continue seamlessly using deterministic presentation demo mode.',
+        requestId: `RC-AUD-${Date.now().toString().slice(-6)}`
+      });
+      setAnalysisError(reasonMsg);
     }
   };
 
-  const activeSegment = currentCase.suspicious_segments?.find(
-    s => currentTimeSec >= s.start_seconds && currentTimeSec <= s.end_seconds
-  );
+  const handleFile = (file: File) => {
+    const validExts = /\.(wav|mp3|ogg|flac|m4a|aac)$/i;
+    if (!file.name.match(validExts)) {
+      setPipelinePhase('error');
+      setPipelineError({
+        stage: 'Format Validation',
+        reason: 'Unsupported evidence format',
+        action: 'Accepted formats: WAV, MP3, FLAC, OGG, M4A.',
+        requestId: 'RC-FMT-ERR'
+      });
+      setAnalysisError('Unsupported evidence format. Accepted formats: WAV, MP3, FLAC, OGG, M4A.');
+      return;
+    }
 
-  // Exact real data mapping from backend analysis response
-  const aiPercentage = typeof currentCase.ai_generation_probability === 'number'
-    ? Math.min(100, Math.max(0, currentCase.ai_generation_probability))
-    : Math.min(100, Math.max(0, 100 - currentCase.authenticity_score));
-  const realPercentage = Math.max(0, Math.min(100, 100 - aiPercentage));
+    const objectUrl = URL.createObjectURL(file);
+    setUploadedAudioSrc(objectUrl);
+    setActiveSample(null);
+    runLiveAnalysis(file);
+  };
 
-  const verdictColor = currentCase.risk_level === 'High Risk' || currentCase.authenticity_score <= 30
-    ? 'var(--risk-high)'
-    : currentCase.risk_level === 'Medium Risk' || currentCase.authenticity_score <= 60
-      ? 'var(--risk-medium)'
-      : 'var(--risk-low)';
+  const handleSelectSample = async (sampleType: 'ai' | 'real') => {
+    setActiveSample(sampleType);
+    const sampleUrl = sampleType === 'ai' ? '/samples/synthetic_voice.wav' : '/samples/human_voice.wav';
+    const sampleFileName = sampleType === 'ai' ? 'synthetic_voice.wav' : 'human_voice.wav';
+    setUploadedAudioSrc(sampleUrl);
+
+    try {
+      const res = await fetch(sampleUrl);
+      const blob = await res.blob();
+      const file = new File([blob], sampleFileName, { type: 'audio/wav' });
+      runLiveAnalysis(file);
+    } catch {
+      const targetCaseId = sampleType === 'ai' ? 'RC-2026-0044' : 'RC-2026-0048';
+      runFastDemoAnalysis(targetCaseId);
+    }
+  };
+
+  const isAi = currentCase?.sample_type === 'ai' || (currentCase?.ai_generation_probability ?? 0) >= 50;
+
+  // Synthesize decorative waveform bars
+  const waveformBars = [
+    25, 45, 60, 30, 80, 95, 70, 40, 20, 55, 75, 90, 85, 40, 65, 80, 95, 100, 85, 60,
+    30, 45, 70, 85, 90, 65, 40, 25, 60, 80, 95, 70, 50, 30, 75, 90, 80, 60, 40, 20
+  ];
 
   return (
-    <div style={{ maxWidth: '1360px', margin: '0 auto', padding: '20px clamp(16px, 3vw, 28px) 80px' }}>
-      {/* Hidden File Input */}
+    <div style={{ maxWidth: '1360px', margin: '0 auto', width: '100%' }}>
       <input
         ref={fileInputRef}
         type="file"
-        accept="audio/mp3,audio/wav,audio/m4a,audio/aac,audio/ogg"
+        accept="audio/*"
         style={{ display: 'none' }}
-        onChange={handleFileChange}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+        }}
       />
 
-      {/* Actual HTML5 Audio element for real playback */}
-      {uploadedAudioSrc && (
-        <audio
-          ref={audioRef}
-          src={uploadedAudioSrc}
-          onTimeUpdate={(e) => setCurrentTimeSec(Math.round(e.currentTarget.currentTime))}
-          onLoadedMetadata={(e) => setDurationSec(Math.round(e.currentTarget.duration) || 28)}
-          onEnded={() => setIsPlaying(false)}
-        />
-      )}
-
-      {/* Header Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
+      {/* 1. Header & Title Section */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}
+      >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--cyan-primary)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700 }}>
-              SPECIALIZED FORENSIC ENGINE 03
+            <span
+              style={{
+                fontSize: '11px',
+                color: 'var(--magenta-vivid)',
+                letterSpacing: '1px',
+                textTransform: 'uppercase',
+                fontWeight: 800
+              }}
+            >
+              MODULE 03 &bull; AUDIO FORENSICS
             </span>
             <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>&bull;</span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>MEL-SPECTROGRAM CNN + WAV2VEC2 ACOUSTIC CLASSIFIER</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              MEL-SPECTROGRAM &bull; VOCODER PHASE &bull; STFT &bull; ZERO-JITTER
+            </span>
           </div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.4px', marginTop: '2px' }}>
-            AUDIO AUTHENTICITY &amp; VOICE CLONING LAB
+          <h1
+            style={{
+              fontSize: 'clamp(22px, 3vw, 30px)',
+              fontWeight: 800,
+              color: '#FFFFFF',
+              letterSpacing: '0.4px',
+              marginTop: '4px'
+            }}
+          >
+            AUDIO FORENSICS &amp; VOICE AUTHENTICITY
           </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px', maxWidth: '780px' }}>
+            Acoustic spectrogram decomposition, neural vocoder phase continuity tracking, and physiological vocal tract biomechanics for AI voice clone detection.
+          </p>
         </div>
 
-        {/* Action Controls */}
+        {/* Top Sample Selectors */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn-cyber-primary"
+            style={{ fontSize: '11px', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '7px' }}
+          >
+            <Upload size={14} />
+            <span>SELECT AUDIO</span>
+          </button>
+
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)', margin: '0 4px' }}>or benchmark:</span>
+
+          <button
+            onClick={() => handleSelectSample('ai')}
+            className={activeSample === 'ai' ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
             style={{ fontSize: '11px', padding: '7px 14px' }}
           >
-            <Upload size={13} />
-            <span>UPLOAD AUDIO</span>
+            <Sparkles size={12} style={{ marginRight: '5px' }} />
+            <span>Sample: Synthetic Voice</span>
           </button>
 
-          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>or load:</span>
-
           <button
-            onClick={() => handleSelectSample('RC-2026-0044')}
-            className={currentCase.case_id === 'RC-2026-0044' && !uploadedAudioSrc ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
-            style={{ fontSize: '11px', padding: '6px 12px' }}
+            onClick={() => handleSelectSample('real')}
+            className={activeSample === 'real' ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
+            style={{ fontSize: '11px', padding: '7px 14px' }}
           >
-            Synthetic Voice Clone (AI)
-          </button>
-          <button
-            onClick={() => handleSelectSample('RC-2026-0048')}
-            className={currentCase.case_id === 'RC-2026-0048' && !uploadedAudioSrc ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
-            style={{ fontSize: '11px', padding: '6px 12px' }}
-          >
-            Human Speech Recording (Authentic)
+            <CheckCircle2 size={12} style={{ marginRight: '5px' }} />
+            <span>Sample: Human Voice</span>
           </button>
         </div>
       </div>
 
-      {/* Analysis Error Toast */}
-      {analysisError && (
-        <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--risk-high)', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--risk-high)', fontSize: '12px' }}>
-          <AlertTriangle size={16} />
-          <span>{analysisError}</span>
+      {/* 2. Drag & Drop Upload Panel */}
+      <div
+        className="glass-panel"
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) handleFile(file);
+        }}
+        style={{
+          padding: '24px',
+          borderRadius: '20px',
+          border: isDragging ? '1px dashed var(--magenta-vivid)' : '1px solid rgba(157, 78, 221, 0.25)',
+          background: isDragging ? 'rgba(31, 19, 43, 0.9)' : '#1F132B',
+          boxShadow: isDragging ? '0 0 30px rgba(199, 36, 177, 0.3)' : 'var(--clay-box-shadow)',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #2A173D 0%, #170C22 100%)',
+              border: '1px solid rgba(157, 78, 221, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--magenta-vivid)',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+          >
+            <Mic size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#FFFFFF' }}>
+              Upload Audio for Forensic Voice Analysis
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Supports WAV, MP3, FLAC, OGG, M4A &bull; Multi-band FFT &bull; SHA-256 cryptographic audit
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-cyber-primary"
+            style={{ padding: '8px 18px', fontSize: '11px' }}
+          >
+            SELECT AUDIO
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Reusable Forensic Pipeline */}
+      <ForensicPipeline
+        hasInput={Boolean(uploadedAudioSrc || currentCase)}
+        inputBadgeText={isDemoMode ? 'DEMO PRESENTATION ACTIVE' : 'LIVE DETECTOR ACTIVE'}
+        overallPhase={pipelinePhase}
+        metadata={{
+          fileName: meta.fileName,
+          fileSize: meta.fileSize,
+          dimensionsOrDuration: meta.duration,
+          modelName: currentCase?.model_verification?.model_name || 'Mel-Spectrogram CNN + Wav2Vec2'
+        }}
+        error={pipelineError}
+        onClearError={() => {
+          setPipelineError(null);
+          setAnalysisError(null);
+          setPipelinePhase('completed');
+        }}
+        onRetry={() => fileInputRef.current?.click()}
+        onContinueWithDemo={() => runFastDemoAnalysis('RC-2026-0044')}
+        steps={pipelineSteps}
+      />
+
+      {/* 4. Live Scanning Laser Animation */}
+      {isScanning && (
+        <div style={{ padding: '40px 0' }}>
+          <LiveScanAnimation mediaType="AUDIO" onComplete={() => setIsScanning(false)} />
         </div>
       )}
 
-      {isScanning ? (
-        <div style={{ padding: '60px 0' }}>
-          <LiveScanAnimation mediaType="AUDIO" onComplete={() => setIsScanning(false)} />
-        </div>
-      ) : (
+      {/* 5. Main Results View */}
+      {!isScanning && currentCase && (
         <>
-          {/* Main Two-Column Grid: Left (~58% Spectral Oscilloscope) & Right (~42% Authenticity Result) */}
-          <div className="audio-forensics-grid" style={{ marginBottom: '24px' }}>
-            {/* Audio Waveform & Spectrogram Laboratory Panel */}
-            <div className="glass-panel forensic-corner" style={{ padding: '20px', borderRadius: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan-primary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                  SPECTRAL &amp; ACOUSTIC OSCILLOSCOPE
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <button
-                    onClick={() => setViewMode('both')}
-                    style={{
-                      background: viewMode === 'both' ? 'rgba(0, 240, 255, 0.15)' : 'transparent',
-                      border: viewMode === 'both' ? '1px solid var(--cyan-primary)' : '1px solid var(--border-subtle)',
-                      color: viewMode === 'both' ? 'var(--cyan-primary)' : 'var(--text-muted)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Both Views
-                  </button>
-                  <button
-                    onClick={() => setViewMode('spectrogram')}
-                    style={{
-                      background: viewMode === 'spectrogram' ? 'rgba(0, 240, 255, 0.15)' : 'transparent',
-                      border: viewMode === 'spectrogram' ? '1px solid var(--cyan-primary)' : '1px solid var(--border-subtle)',
-                      color: viewMode === 'spectrogram' ? 'var(--cyan-primary)' : 'var(--text-muted)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Spectrogram
-                  </button>
-                  <button
-                    onClick={() => setViewMode('waveform')}
-                    style={{
-                      background: viewMode === 'waveform' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                      border: viewMode === 'waveform' ? '1px solid var(--risk-low)' : '1px solid var(--border-subtle)',
-                      color: viewMode === 'waveform' ? 'var(--risk-low)' : 'var(--text-muted)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Waveform
-                  </button>
-                </div>
+          {/* Main Result Card with Radial AI-Generated Likelihood */}
+          <AnalysisResult
+            result={currentCase}
+            title="AUDIO FORENSICS RESULT"
+            onGenerateReport={onGenerateReport}
+            onOpenWhyModal={() => setIsWhyModalOpen(true)}
+          />
+
+          {/* Technical Telemetry Strip */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '12px',
+              marginBottom: '24px'
+            }}
+          >
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Duration
               </div>
-
-              {/* 1. SPECTROGRAM CANVAS VIEW */}
-              {(viewMode === 'both' || viewMode === 'spectrogram') && (
-                <div style={{ marginBottom: viewMode === 'both' ? '10px' : '0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '3px' }}>
-                    <span>Mel-Spectrogram (0 Hz - 16 kHz)</span>
-                    <span style={{ color: currentCase.sample_type === 'ai' ? 'var(--risk-high)' : 'var(--risk-low)' }}>
-                      {currentCase.sample_type === 'ai' ? 'HiFi-GAN Artifact Band: >7.8 kHz' : 'Natural Spectral Decay'}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      position: 'relative',
-                      height: viewMode === 'both' ? '115px' : '230px',
-                      backgroundColor: 'var(--bg-deep)',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-subtle)',
-                      overflow: 'hidden',
-                      display: 'flex',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'linear-gradient(90deg, #091a24 0%, #164e63 15%, #0e7490 35%, #0891b2 55%, #155e75 75%, #082f49 100%)',
-                        opacity: 0.8
-                      }}
-                    />
-
-                    {/* Suspicious Spectrogram Time Window Overlay (00:17 - 00:21) */}
-                    {currentCase.sample_type === 'ai' && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          bottom: 0,
-                          left: '60%',
-                          width: '15%',
-                          backgroundColor: 'rgba(239, 68, 68, 0.55)',
-                          border: '2px solid var(--risk-high)',
-                          boxShadow: '0 0 15px rgba(239, 68, 68, 0.6)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#ffffff',
-                          fontSize: '9px',
-                          fontWeight: 700,
-                          textAlign: 'center',
-                          padding: '2px 4px',
-                          zIndex: 10
-                        }}
-                      >
-                        AI CLONE SEGMENT
-                      </div>
-                    )}
-
-                    {/* Current Scrubber Head */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        bottom: 0,
-                        left: `${(currentTimeSec / durationSec) * 100}%`,
-                        width: '2px',
-                        backgroundColor: 'var(--cyan-primary)',
-                        boxShadow: '0 0 10px var(--cyan-primary)',
-                        zIndex: 20,
-                        transition: 'left 0.1s linear'
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 2. WAVEFORM VISUALIZER */}
-              {(viewMode === 'both' || viewMode === 'waveform') && (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '3px' }}>
-                    <span>Amplitude Waveform &bull; Micro-Pitch Shimmer</span>
-                    <span>Duration: 00:{String(durationSec).padStart(2, '0')}</span>
-                  </div>
-                  <div
-                    style={{
-                      position: 'relative',
-                      height: viewMode === 'both' ? '90px' : '230px',
-                      backgroundColor: 'var(--bg-deep)',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-subtle)',
-                      overflow: 'hidden',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-around',
-                      padding: '0 8px',
-                      cursor: 'pointer'
-                    }}
-                    onClick={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const x = e.clientX - rect.left;
-                      const pct = x / rect.width;
-                      const targetSec = Math.round(pct * durationSec);
-                      setCurrentTimeSec(targetSec);
-                      if (audioRef.current) {
-                        audioRef.current.currentTime = targetSec;
-                      }
-                    }}
-                  >
-                    {/* Simulated Waveform Bars */}
-                    {Array.from({ length: 48 }).map((_, i) => {
-                      const isSuspectBar = currentCase.sample_type === 'ai' && i >= 28 && i <= 35;
-                      const height = isSuspectBar
-                        ? 75 + Math.sin(i * 1.5) * 20
-                        : 30 + Math.sin(i * 0.8) * 25 + Math.cos(i * 1.2) * 20;
-
-                      return (
-                        <div
-                          key={i}
-                          style={{
-                            width: '4px',
-                            height: `${height}%`,
-                            backgroundColor: isSuspectBar ? 'var(--risk-high)' : 'var(--cyan-primary)',
-                            borderRadius: '2px',
-                            boxShadow: isSuspectBar ? '0 0 6px var(--risk-high)' : 'none',
-                            transition: 'height 0.2s ease'
-                          }}
-                        />
-                      );
-                    })}
-
-                    {/* Scrubber indicator */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        bottom: 0,
-                        left: `${(currentTimeSec / durationSec) * 100}%`,
-                        width: '2px',
-                        backgroundColor: '#ffffff',
-                        zIndex: 20
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Playback Controls & Timeline Readout */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginTop: '10px',
-                  padding: '8px 12px',
-                  backgroundColor: 'var(--bg-body-pattern-1)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button
-                    onClick={togglePlay}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      backgroundColor: 'var(--cyan-primary)',
-                      border: 'none',
-                      color: '#030a16',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer'
-                    }}
-                    title={isPlaying ? 'Pause' : 'Play'}
-                  >
-                    {isPlaying ? <Pause size={16} /> : <Play size={16} style={{ marginLeft: '2px' }} />}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setCurrentTimeSec(0);
-                      if (audioRef.current) audioRef.current.currentTime = 0;
-                    }}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                    title="Restart"
-                  >
-                    <RotateCcw size={15} />
-                  </button>
-
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-main)', fontWeight: 600 }}>
-                    00:{String(currentTimeSec).padStart(2, '0')} / 00:{String(durationSec).padStart(2, '0')}
-                  </div>
-                </div>
-
-                {/* Jump to Suspicious Segment Button */}
-                {currentCase.sample_type === 'ai' && (
-                  <button
-                    onClick={() => {
-                      setCurrentTimeSec(18);
-                      if (audioRef.current) audioRef.current.currentTime = 18;
-                    }}
-                    style={{
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      border: '1px solid var(--risk-high)',
-                      color: 'var(--risk-high)',
-                      padding: '4px 10px',
-                      borderRadius: '4px',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Jump to Suspect (00:17 - 00:21)
-                  </button>
-                )}
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                00:28
               </div>
-
-              {/* Suspicious Segment Status Alert */}
-              {activeSegment && (
-                <div
-                  style={{
-                    marginTop: '8px',
-                    padding: '8px 12px',
-                    backgroundColor: 'var(--bg-body-pattern-1)',
-                    borderLeft: `3px solid ${activeSegment.risk_level === 'High' ? 'var(--risk-high)' : 'var(--risk-low)'}`,
-                    borderTop: '1px solid var(--border-subtle)',
-                    borderRight: '1px solid var(--border-subtle)',
-                    borderBottom: '1px solid var(--border-subtle)',
-                    borderRadius: '0 6px 6px 0',
-                    fontSize: '11px'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                    <strong style={{ color: activeSegment.risk_level === 'High' ? 'var(--risk-high)' : 'var(--risk-low)', fontSize: '11px' }}>
-                      TIME SLICE {activeSegment.start_time} - {activeSegment.end_time}: {activeSegment.anomaly_type}
-                    </strong>
-                    <span className={activeSegment.risk_level === 'High' ? 'badge-risk-high' : 'badge-risk-low'} style={{ fontSize: '10px' }}>
-                      {activeSegment.risk_level} Risk
-                    </span>
-                  </div>
-                  <div style={{ color: 'var(--text-main)', lineHeight: 1.4 }}>
-                    {activeSegment.description}
-                  </div>
-                </div>
-              )}
-
-              {/* Compact Drag & Drop Upload Zone for Audio */}
-              <div
-                style={{
-                  marginTop: '10px',
-                  border: isDragging ? '2px dashed var(--cyan-primary)' : '1px dashed var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '9px 12px',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  backgroundColor: isDragging ? 'rgba(0, 240, 255, 0.08)' : 'var(--bg-card)',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <Upload size={13} color="var(--cyan-primary)" />
-                <span style={{ fontSize: '11px', color: 'var(--text-main)', fontWeight: 600 }}>
-                  Click to browse or drop an audio file
-                </span>
-                <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                  (MP3, WAV, M4A, AAC, OGG &bull; Max 50 MB)
-                </span>
-              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>Total playback length</div>
             </div>
 
-            {/* RIGHT SIDE: Single Unified Authenticity Result Panel */}
-            <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px' }}>
-              {/* A. Header: Title + Case ID on exact same baseline */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan-primary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                  AUTHENTICITY RESULT
-                </span>
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', background: 'var(--bg-card-solid)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                  {currentCase.case_id}
-                </span>
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Sample Rate
               </div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--magenta-vivid)', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                44.1 kHz
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>16-bit Linear PCM</div>
+            </div>
 
-              {/* B. AI vs Real Percentage Section: Equal 2-Column Layout */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Channels
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                2 (Stereo)
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>Dual-channel phase track</div>
+            </div>
+
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Processing Time
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#34D399', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                2.8 sec
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>GPU accelerated STFT</div>
+            </div>
+          </div>
+
+          {/* Audio Forensic Workstation: Waveform & Mel-Spectrogram Panels */}
+          <div
+            style={{
+              padding: '24px',
+              borderRadius: '20px',
+              border: '1px solid rgba(157, 78, 221, 0.28)',
+              background: '#1F132B',
+              boxShadow: 'var(--clay-box-shadow)',
+              marginBottom: '24px'
+            }}
+          >
+            {/* Waveform Player Section */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => setIsPlaying(!isPlaying)}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #C724B1 0%, #9D4EDD 100%)',
+                    border: 'none',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(199, 36, 177, 0.45)'
+                  }}
+                >
+                  {isPlaying ? <Pause size={18} /> : <Play size={18} style={{ marginLeft: '2px' }} />}
+                </button>
+
                 <div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--risk-high)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    SYNTHETIC / AI-VOICE
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF' }}>
+                    ACOUSTIC WAVEFORM &bull; TIME DOMAIN
                   </div>
-                  <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--risk-high)', lineHeight: 1, marginTop: '6px' }}>
-                    {aiPercentage.toFixed(0)}%
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--risk-low)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    REAL / AUTHENTIC
-                  </div>
-                  <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--risk-low)', lineHeight: 1, marginTop: '6px' }}>
-                    {realPercentage.toFixed(0)}%
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    Timestamp: 00:18 / 00:28 &bull; Formant region inspection
                   </div>
                 </div>
               </div>
 
-              {/* C. Probability Bar directly connected to percentages */}
-              <div style={{ marginTop: '10px' }}>
-                <div style={{ height: '10px', width: '100%', borderRadius: '5px', overflow: 'hidden', display: 'flex', background: 'var(--bg-body-pattern-1)', border: '1px solid var(--border-subtle)' }}>
-                  <div
-                    style={{
-                      width: `${aiPercentage}%`,
-                      background: 'linear-gradient(90deg, #ef4444, #f87171)',
-                      transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                    title={`AI Likelihood: ${aiPercentage.toFixed(1)}%`}
-                  />
-                  <div
-                    style={{
-                      width: `${realPercentage}%`,
-                      background: 'linear-gradient(90deg, #06b6d4, #10b981)',
-                      transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                    title={`Real Likelihood: ${realPercentage.toFixed(1)}%`}
-                  />
+              {isAi && (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    background: 'rgba(255, 75, 114, 0.15)',
+                    border: '1px solid rgba(255, 75, 114, 0.4)',
+                    color: '#FF6B8B',
+                    fontSize: '11px',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700
+                  }}
+                >
+                  <AlertTriangle size={13} />
+                  <span>SUSPICION SEGMENT: 00:17 - 00:21</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginTop: '5px', fontWeight: 600 }}>
-                  <span style={{ color: 'var(--risk-high)' }}>AI voice clone likelihood</span>
-                  <span style={{ color: 'var(--risk-low)' }}>Human voice likelihood</span>
-                </div>
-              </div>
+              )}
+            </div>
 
-              {/* D. Verdict + Confidence: Compact horizontal row */}
+            {/* Simulated Animated Waveform Bars */}
+            <div
+              style={{
+                height: '90px',
+                padding: '14px 18px',
+                borderRadius: '14px',
+                background: '#12081C',
+                border: '1px solid rgba(157, 78, 221, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Playback scrubber indicator */}
               <div
                 style={{
-                  marginTop: '14px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid var(--border-subtle)',
+                  position: 'absolute',
+                  left: `${playProgress}%`,
+                  top: 0,
+                  bottom: 0,
+                  width: '2px',
+                  background: 'var(--magenta-vivid)',
+                  boxShadow: '0 0 10px var(--magenta-vivid)',
+                  zIndex: 2
+                }}
+              />
+
+              {waveformBars.map((height, idx) => {
+                const isSuspiciousBar = isAi && idx >= 24 && idx <= 30;
+                const barColor = isSuspiciousBar
+                  ? '#FF4B72'
+                  : (idx / waveformBars.length <= playProgress / 100 ? 'var(--magenta-vivid)' : 'rgba(157, 78, 221, 0.35)');
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setPlayProgress((idx / waveformBars.length) * 100)}
+                    style={{
+                      flex: 1,
+                      height: `${height}%`,
+                      background: barColor,
+                      borderRadius: '2px',
+                      cursor: 'pointer',
+                      transition: 'height 0.2s ease, background 0.2s ease',
+                      boxShadow: isSuspiciousBar ? '0 0 8px #FF4B72' : 'none'
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Spectrogram Visualization Section */}
+            <div style={{ marginTop: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                  MEL-SPECTROGRAM DENSITY HEATMAP (0 Hz - 22,050 Hz)
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  LOG MAGNITUDE STFT
+                </span>
+              </div>
+
+              {/* Attractive Multi-band Spectrogram Canvas Box */}
+              <div
+                style={{
+                  height: '140px',
+                  borderRadius: '14px',
+                  background: isAi
+                    ? 'linear-gradient(180deg, rgba(255, 75, 114, 0.4) 0%, rgba(199, 36, 177, 0.3) 30%, rgba(157, 78, 221, 0.2) 60%, #12081C 100%)'
+                    : 'linear-gradient(180deg, rgba(16, 185, 129, 0.4) 0%, rgba(5, 150, 105, 0.25) 30%, rgba(15, 23, 42, 0.4) 70%, #12081C 100%)',
+                  border: '1px solid rgba(157, 78, 221, 0.2)',
+                  position: 'relative',
+                  overflow: 'hidden',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between'
+                  justifyContent: 'center'
                 }}
               >
-                <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    VERDICT
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: verdictColor, marginTop: '2px' }}>
-                    {currentCase.assessment}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    CONFIDENCE
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', marginTop: '2px' }}>
-                    {Math.round(currentCase.confidence_score * 100)}%
-                  </div>
-                </div>
-              </div>
+                {/* Horizontal frequency gridlines */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px)',
+                    backgroundSize: '100% 28px',
+                    pointerEvents: 'none'
+                  }}
+                />
 
-              {/* E. Secondary Authenticity Score: Compact horizontal 2-column layout */}
-              <div
-                style={{
-                  marginTop: '14px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px'
-                }}
-              >
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ScoreMeter
-                    score={currentCase.authenticity_score}
-                    riskLevel={currentCase.risk_level}
-                    assessment={currentCase.assessment}
-                    confidenceScore={currentCase.confidence_score}
-                    size={58}
-                    hideDetails={true}
-                  />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                    UNIFIED AUTHENTICITY SCORE
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                    <span style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', lineHeight: 1 }}>
-                      {currentCase.authenticity_score} / 100
-                    </span>
-                    <span
-                      className={
-                        currentCase.authenticity_score <= 30
-                          ? 'badge-risk-high'
-                          : currentCase.authenticity_score <= 60
-                            ? 'badge-risk-medium'
-                            : 'badge-risk-low'
-                      }
-                      style={{ fontSize: '10px', padding: '1px 6px', lineHeight: 1.4 }}
-                    >
-                      {currentCase.risk_level}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {currentCase.authenticity_score >= 70 ? 'Natural glottal pulses & micro-jitter verified' : 'Neural vocoder harmonic artifacts detected'}
-                  </div>
-                </div>
-              </div>
-
-              {/* F. Forensic Metrics: Clean 2x2 Grid with identical dimensions & typography */}
-              <div
-                style={{
-                  marginTop: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '8px'
-                }}
-              >
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    AI VOICE RISK
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.ai_generation_probability > 70 ? 'var(--risk-high)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.ai_generation_probability.toFixed(1)}%
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    ACOUSTIC ANOMALY
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.forensic_anomaly_score > 50 ? 'var(--risk-high)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.forensic_anomaly_score.toFixed(1)}%
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    SPLICE / EDITING
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.manipulation_risk > 50 ? 'var(--risk-medium)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.manipulation_risk.toFixed(1)}%
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    VOCODER PHASE DRIFT
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.sample_type === 'ai' ? 'var(--cyan-primary)' : 'var(--text-muted)', marginTop: '2px' }}>
-                    {currentCase.sample_type === 'ai' ? '68.2%' : '14.1%'}
-                  </div>
-                </div>
-              </div>
-
-              {/* G. Why This Result: Compact section */}
-              <div
-                style={{
-                  marginTop: '12px',
-                  paddingTop: '10px',
-                  borderTop: '1px solid var(--border-subtle)'
-                }}
-              >
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
-                  WHY THIS RESULT?
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.45, marginBottom: '6px' }}>
-                  {currentCase.why_result_explanation.length > 150
-                    ? currentCase.why_result_explanation.slice(0, 150) + '...'
-                    : currentCase.why_result_explanation}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                  {currentCase.suspicious_segments?.slice(0, 2).map((s, i) => (
-                    <span key={`seg-${i}`} style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '3px', background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', color: 'var(--cyan-primary)', fontFamily: 'var(--font-mono)' }}>
-                      {s.start_time}-{s.end_time}: {s.anomaly_type}
-                    </span>
-                  ))}
-                  {currentCase.top_contributing_signals?.slice(0, 2).map((sig, i) => (
-                    <span key={`sig-${i}`} style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '3px', background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', color: 'var(--blue-soft)' }}>
-                      {sig.signal}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* H. Action Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px' }}>
-                <button
-                  onClick={() => onGenerateReport(currentCase.case_id)}
-                  className="btn-cyber-primary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '11px', padding: '8px 12px' }}
+                {/* Acoustic Annotations */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '12px',
+                    fontSize: '10px',
+                    fontFamily: 'var(--font-mono)',
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  }}
                 >
-                  <FileSpreadsheet size={14} />
-                  <span>GENERATE REPORT</span>
-                </button>
-                <button
-                  onClick={() => setIsWhyModalOpen(true)}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '11px', padding: '8px 12px' }}
-                >
-                  <HelpCircle size={14} color="var(--cyan-primary)" />
-                  <span>WHY THIS RESULT?</span>
-                </button>
-              </div>
+                  HIGH FREQUENCY: 16.0 kHz &bull; Vocoder phase artifacts
+                </div>
 
-              {/* Quick Actions Row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                <button
-                  onClick={() => setIsScanning(true)}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '10px', padding: '6px 8px' }}
-                  title="Re-run synthetic speech scan"
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '10px',
+                    left: '12px',
+                    fontSize: '10px',
+                    fontFamily: 'var(--font-mono)',
+                    color: 'rgba(255, 255, 255, 0.7)'
+                  }}
                 >
-                  <Play size={12} />
-                  <span>RE-SCAN</span>
-                </button>
-                <button
-                  onClick={() => onNavigate('workspace')}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '10px', padding: '6px 8px' }}
-                  title="Cross-examine audio alongside video and text"
-                >
-                  <Layers size={12} />
-                  <span>CROSS-EXAMINE</span>
-                </button>
+                  FUNDAMENTAL F0: 124 Hz &bull; Rigid zero-jitter contour
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Evidence Cards */}
-          <section style={{ marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.4px', marginBottom: '12px' }}>
-              AUDIO FORENSIC SIGNALS &amp; EVIDENCE BREAKDOWN
+          {/* Forensic Signals Breakdown */}
+          <div
+            style={{
+              padding: '20px',
+              borderRadius: '20px',
+              border: '1px solid rgba(157, 78, 221, 0.28)',
+              background: '#1F132B',
+              boxShadow: 'var(--clay-box-shadow)',
+              marginBottom: '24px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Layers size={18} color="var(--magenta-vivid)" />
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.5px' }}>
+                  FORENSIC SIGNALS &amp; ATTRIBUTION
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                5 SIGNALS EVALUATED
+              </span>
             </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: '14px'
-              }}
-            >
-              {currentCase.evidence_breakdown.map((card, idx) => (
-                <EvidenceCardComponent key={idx} card={card} />
-              ))}
-            </div>
-          </section>
 
-          {/* Why This Result Modal */}
-          <WhyThisResultModal
-            isOpen={isWhyModalOpen}
-            onClose={() => setIsWhyModalOpen(false)}
-            result={currentCase}
-            onInvestigateDeeper={() => onNavigate('workspace')}
-          />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+              {currentCase.signals.map((sig, idx) => {
+                const isAnomaly = sig.score >= 60;
+                const isModerate = sig.score >= 35 && sig.score < 60;
+                const barColor = isAnomaly ? '#FF4B72' : (isModerate ? '#FBBF24' : '#10B981');
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '14px',
+                      borderRadius: '14px',
+                      background: '#150C20',
+                      border: '1px solid rgba(157, 78, 221, 0.18)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#FFFFFF' }}>
+                        {sig.name}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: `${barColor}22`,
+                            border: `1px solid ${barColor}55`,
+                            color: barColor,
+                            fontWeight: 700
+                          }}
+                        >
+                          {sig.status}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: barColor }}>
+                          {sig.score.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4, marginBottom: '8px' }}>
+                      {sig.explanation}
+                    </div>
+
+                    <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${sig.score}%`,
+                          background: barColor,
+                          boxShadow: `0 0 8px ${barColor}`
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </>
+      )}
+
+      {/* Why This Result Modal */}
+      {isWhyModalOpen && currentCase && (
+        <WhyThisResultModal
+          isOpen={isWhyModalOpen}
+          result={currentCase}
+          onClose={() => setIsWhyModalOpen(false)}
+        />
       )}
     </div>
   );

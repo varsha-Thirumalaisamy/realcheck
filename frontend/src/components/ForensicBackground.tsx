@@ -36,10 +36,10 @@ export const ForensicBackground: React.FC = () => {
     }> = [];
 
     const colors = [
-      'rgba(0, 240, 255, ',    // Cyan
-      'rgba(56, 189, 248, ',   // Sky blue
-      'rgba(129, 140, 248, ',  // Indigo
-      'rgba(16, 185, 129, '    // Emerald
+      'rgba(157, 78, 221, ',   // Electric violet
+      'rgba(199, 36, 177, ',   // Vivid magenta
+      'rgba(181, 101, 243, ',  // Soft violet
+      'rgba(77, 25, 121, '     // Deep indigo
     ];
 
     for (let i = 0; i < particleCount; i++) {
@@ -86,7 +86,7 @@ export const ForensicBackground: React.FC = () => {
           if (dist < 130) {
             const lineAlpha = (1 - dist / 130) * 0.14;
             ctx.beginPath();
-            ctx.strokeStyle = `rgba(0, 240, 255, ${lineAlpha})`;
+            ctx.strokeStyle = `rgba(157, 78, 221, ${lineAlpha})`;
             ctx.lineWidth = 0.6;
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
@@ -98,7 +98,7 @@ export const ForensicBackground: React.FC = () => {
         ctx.beginPath();
         ctx.arc(p1.x, p1.y, p1.radius, 0, Math.PI * 2);
         ctx.fillStyle = `${p1.color}${Math.max(0, p1.alpha)})`;
-        ctx.shadowColor = '#00f0ff';
+        ctx.shadowColor = '#9D4EDD';
         ctx.shadowBlur = 6;
         ctx.fill();
         ctx.shadowBlur = 0;

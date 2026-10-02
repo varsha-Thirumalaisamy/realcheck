@@ -67,39 +67,76 @@ from ..schemas.forensics import InvestigationResult
 router = APIRouter(tags=["Analysis"])
 
 def save_investigation_to_db(result: InvestigationResult, db: Session):
-    db_inv = Investigation(
-        case_id=result.case_id,
-        media_type=result.media_type,
-        file_name=result.file_name,
-        assessment=result.assessment,
-        authenticity_score=result.authenticity_score,
-        risk_level=result.risk_level,
-        confidence_level=result.confidence_level,
-        confidence_score=result.confidence_score,
-        is_demo_analysis=result.is_demo_analysis,
-        disclaimer=result.disclaimer,
-        ai_generation_probability=result.ai_generation_probability,
-        manipulation_risk=result.manipulation_risk,
-        forensic_anomaly_score=result.forensic_anomaly_score,
-        metadata_risk_score=result.metadata_risk_score,
-        signals=[s.model_dump() for s in result.signals],
-        evidence_breakdown=[e.model_dump() for e in result.evidence_breakdown],
-        metadata_analysis=result.metadata.model_dump(),
-        suspicious_regions=[r.model_dump() for r in (result.suspicious_regions or [])],
-        suspicious_segments=[s.model_dump() for s in (result.suspicious_segments or [])],
-        text_metrics=result.text_metrics,
-        heatmap_data=result.heatmap_data,
-        why_result_explanation=result.why_result_explanation,
-        top_contributing_signals=result.top_contributing_signals,
-        limitations=result.limitations
-    )
-    db.add(db_inv)
-    db.commit()
-    db.refresh(db_inv)
+    try:
+        existing = db.query(Investigation).filter(Investigation.case_id == result.case_id).first()
+        if existing:
+            existing.media_type = result.media_type
+            existing.file_name = result.file_name
+            existing.assessment = result.assessment
+            existing.authenticity_score = result.authenticity_score
+            existing.risk_level = result.risk_level
+            existing.confidence_level = result.confidence_level
+            existing.confidence_score = result.confidence_score
+            existing.is_demo_analysis = result.is_demo_analysis
+            existing.disclaimer = result.disclaimer
+            existing.ai_generation_probability = result.ai_generation_probability
+            existing.manipulation_risk = result.manipulation_risk
+            existing.forensic_anomaly_score = result.forensic_anomaly_score
+            existing.metadata_risk_score = result.metadata_risk_score
+            existing.signals = [s.model_dump() for s in result.signals]
+            existing.evidence_breakdown = [e.model_dump() for e in result.evidence_breakdown]
+            existing.metadata_analysis = result.metadata.model_dump()
+            existing.suspicious_regions = [r.model_dump() for r in (result.suspicious_regions or [])]
+            existing.suspicious_segments = [s.model_dump() for s in (result.suspicious_segments or [])]
+            existing.text_metrics = result.text_metrics
+            existing.heatmap_data = result.heatmap_data
+            existing.why_result_explanation = result.why_result_explanation
+            existing.top_contributing_signals = result.top_contributing_signals
+            existing.limitations = result.limitations
+            db.commit()
+            db.refresh(existing)
+            return existing
+
+        db_inv = Investigation(
+            case_id=result.case_id,
+            media_type=result.media_type,
+            file_name=result.file_name,
+            assessment=result.assessment,
+            authenticity_score=result.authenticity_score,
+            risk_level=result.risk_level,
+            confidence_level=result.confidence_level,
+            confidence_score=result.confidence_score,
+            is_demo_analysis=result.is_demo_analysis,
+            disclaimer=result.disclaimer,
+            ai_generation_probability=result.ai_generation_probability,
+            manipulation_risk=result.manipulation_risk,
+            forensic_anomaly_score=result.forensic_anomaly_score,
+            metadata_risk_score=result.metadata_risk_score,
+            signals=[s.model_dump() for s in result.signals],
+            evidence_breakdown=[e.model_dump() for e in result.evidence_breakdown],
+            metadata_analysis=result.metadata.model_dump(),
+            suspicious_regions=[r.model_dump() for r in (result.suspicious_regions or [])],
+            suspicious_segments=[s.model_dump() for s in (result.suspicious_segments or [])],
+            text_metrics=result.text_metrics,
+            heatmap_data=result.heatmap_data,
+            why_result_explanation=result.why_result_explanation,
+            top_contributing_signals=result.top_contributing_signals,
+            limitations=result.limitations
+        )
+        db.add(db_inv)
+        db.commit()
+        db.refresh(db_inv)
+        return db_inv
+    except Exception as e:
+        db.rollback()
+        safe_print(f"Notice: Database persistence ({e}). Continuing with in-memory result.")
+        return None
 
 # Initialized Detectors
+from ..detectors.image.detector import ImageDetector
+local_img_detector = ImageDetector()
 img_detector = ImageDetectorClass()
-vid_detector = VideoDetector(neural_detector=img_detector)
+vid_detector = VideoDetector(neural_detector=local_img_detector)
 aud_detector = AudioDetector()
 txt_detector = TextDetector()
 
@@ -107,6 +144,7 @@ txt_detector = TextDetector()
 async def analyze_image(
     file: Optional[UploadFile] = File(None),
     sample_id: Optional[str] = Form(None),
+    fallback: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     import tempfile
@@ -167,22 +205,38 @@ async def analyze_image(
         f.write(content)
 
     try:
-        result = img_detector.analyze(
-            tmp_path,
-            metadata={
-                "file_name": file_name,
-                "file_size": size_str,
-                "request_id": request_id
-            }
-        )
+        import anyio
+        try:
+            result = await anyio.to_thread.run_sync(
+                img_detector.analyze,
+                tmp_path,
+                {
+                    "file_name": file_name,
+                    "file_size": size_str,
+                    "request_id": request_id
+                }
+            )
+        except (RealityDefenderAuthenticationError, RealityDefenderConfigurationError, RealityDefenderRateLimitError, RealityDefenderTimeoutError, RealityDefenderAPIError, Exception) as api_err:
+            safe_print(f"Notice: External detector unavailable ({type(api_err).__name__}: {api_err}). Executing REALCHECK Multi-Signal Forensic Engine.")
+            result = await anyio.to_thread.run_sync(
+                local_img_detector.analyze,
+                tmp_path,
+                {
+                    "file_name": file_name,
+                    "file_size": size_str,
+                    "request_id": request_id
+                }
+            )
 
         safe_print("[2/5] Model configuration   ✓")
         safe_print("[3/5] Image preprocessing   ✓")
         safe_print("[4/5] API inference         ✓")
         safe_print("[5/5] Result parsing        ✓\n")
-        safe_print(f"Model: {result.model_verification.get('model_name', 'Illuminarty AI Image Classifier')}")
+        model_name = result.model_verification.get('model_name', 'REALCHECK Multi-Signal Forensic Engine') if result.model_verification else 'REALCHECK Multi-Signal Forensic Engine'
+        safe_print(f"Model: {model_name}")
         safe_print(f"AI Probability: {result.ai_generation_probability:.2f}%")
-        safe_print(f"Processing Time: {result.model_verification.get('inference_time_ms', 0):.1f} ms\n")
+        if result.model_verification:
+            safe_print(f"Processing Time: {result.model_verification.get('inference_time_ms', 0):.1f} ms\n")
         safe_print("Inference completed successfully.")
         safe_print("========================================\n")
 
@@ -353,7 +407,8 @@ async def analyze_video(
             f.write(content)
             
     try:
-        result = vid_detector.analyze(tmp_path, {"file_name": file_name, "file_size": size_str})
+        import anyio
+        result = await anyio.to_thread.run_sync(vid_detector.analyze, tmp_path, {"file_name": file_name, "file_size": size_str})
         save_investigation_to_db(result, db)
         
         _trigger_celery_check("VIDEO", file_name, size_str)
@@ -389,7 +444,8 @@ async def analyze_audio(
             f.write(content)
             
     try:
-        result = aud_detector.analyze(tmp_path, {"file_name": file_name, "file_size": size_str})
+        import anyio
+        result = await anyio.to_thread.run_sync(aud_detector.analyze, tmp_path, {"file_name": file_name, "file_size": size_str})
         save_investigation_to_db(result, db)
         _trigger_celery_check("AUDIO", file_name, size_str)
         return result
@@ -410,7 +466,8 @@ async def analyze_text(
             from .cases import db_model_to_pydantic
             return db_model_to_pydantic(existing)
         
-    result = txt_detector.analyze(text, {"file_name": file_name})
+    import anyio
+    result = await anyio.to_thread.run_sync(txt_detector.analyze, text, {"file_name": file_name})
     save_investigation_to_db(result, db)
     _trigger_celery_check("TEXT", file_name, "0.1 MB", text)
     return result

@@ -27,8 +27,8 @@ class TextDetector(BaseDetector):
         self.walter_client = walter_client or WalterWritesClient()
 
     def analyze(self, file_path_or_content: Any, metadata: Optional[Dict[str, Any]] = None) -> InvestigationResult:
-        TextDetector._case_counter += 1
-        case_id = f"RC-{TextDetector._case_counter:03d}"
+        import uuid
+        case_id = (metadata or {}).get("request_id") or f"RC-2026-{int(time.time() % 10000):04d}-{uuid.uuid4().hex[:4].upper()}"
         file_name = (metadata or {}).get("file_name", "analyzed_document.txt")
         
         text_content = str(file_path_or_content) if file_path_or_content else ""
@@ -187,36 +187,36 @@ class TextDetector(BaseDetector):
             walter_res = self.walter_client.detect_ai(text_content)
             if walter_res and walter_res.get("status") == "SUCCESS" and walter_res.get("ai_score") is not None:
                 ext_ai_score = float(walter_res["ai_score"])
-                ai_score = max(ai_score, ext_ai_score)
+                ai_score = (ai_score * 0.65) + (ext_ai_score * 0.35)
                 sig_strength = "Strong" if ext_ai_score >= 70 else ("Moderate" if ext_ai_score >= 40 else "Normal")
                 sig_status = "Suspicious Pattern" if ext_ai_score >= 50 else "Within Normal Variance"
                 signals.append(self._create_signal(
                     "External Neural AI Detection (Walter Writes)",
                     "neural_api",
                     round(ext_ai_score, 1),
-                    0.5,
+                    0.35,
                     sig_strength,
                     sig_status
                 ))
 
         # Classification Logic
-        assessment = "Uncertain"
+        assessment = "Inconclusive"
         confidence = 0.5
         
         if manipulation_score >= 40:
-            assessment = "Manipulated"
+            assessment = "Likely AI-Generated"
             confidence = min(0.95, 0.4 + (manipulation_score / 100))
         elif ai_score >= 60 and manipulation_score >= 20:
-            assessment = "AI-Edited"
+            assessment = "Likely AI-Generated"
             confidence = min(0.9, 0.5 + ((ai_score + manipulation_score) / 200))
         elif ai_score >= 45:
-            assessment = "AI-Generated"
+            assessment = "Likely AI-Generated"
             confidence = min(0.98, 0.5 + (ai_score / 150))
         elif ai_score <= 30 and manipulation_score < 20 and word_count >= 20:
-            assessment = "Human-Written"
+            assessment = "Likely Human-Written"
             confidence = min(0.95, 0.6 + burstiness)
         else:
-            assessment = "Uncertain"
+            assessment = "Inconclusive"
             confidence = 0.4
 
         if word_count < 20:

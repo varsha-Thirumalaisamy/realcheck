@@ -18,6 +18,7 @@ import { forensicApi } from '../services/api';
 import { InvestigationResult } from '../types/forensics';
 import { SAMPLE_CASES } from '../data/sampleCases';
 import { LoadingState, ErrorState, EmptyState } from '../components/AppStates';
+import { getForensicClassification, extractForensicReasons } from '../utils/forensicReasoning';
 
 interface ForensicReportsPageProps {
   selectedCaseId?: string;
@@ -186,9 +187,14 @@ export const ForensicReportsPage: React.FC<ForensicReportsPageProps> = ({
     );
   }
 
+  const classification = currentCase ? getForensicClassification(currentCase) : 'INCONCLUSIVE';
+  const reasonsData = currentCase ? extractForensicReasons(currentCase) : null;
+  const isLikelySuspicious = classification.includes('AI') || classification.includes('MANIPULATED');
+  const isLikelyReal = classification.includes('REAL') || classification.includes('HUMAN');
+  const verdictColor = isLikelySuspicious ? '#FF4B72' : isLikelyReal ? '#10B981' : '#F59E0B';
   const isHighRisk = currentCase.authenticity_score <= 30;
   const isMediumRisk = currentCase.authenticity_score > 30 && currentCase.authenticity_score <= 60;
-  const scoreColor = isHighRisk ? '#ef4444' : (isMediumRisk ? '#f59e0b' : '#10b981');
+  const scoreColor = verdictColor;
 
   return (
     <div style={{ maxWidth: '1360px', margin: '0 auto', padding: '24px clamp(16px, 3vw, 28px) 80px' }}>
@@ -311,7 +317,7 @@ export const ForensicReportsPage: React.FC<ForensicReportsPageProps> = ({
         <div
           style={{
             backgroundColor: 'rgba(15, 23, 42, 0.85)',
-            borderLeft: `6px solid ${scoreColor}`,
+            borderLeft: `6px solid ${verdictColor}`,
             borderRadius: '6px',
             padding: '20px 24px',
             marginBottom: '28px',
@@ -324,61 +330,84 @@ export const ForensicReportsPage: React.FC<ForensicReportsPageProps> = ({
         >
           <div>
             <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1px' }}>
-              Model-Based Authenticity Assessment
+              FINAL ASSESSMENT
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: scoreColor, marginTop: '2px' }}>
-              {currentCase?.assessment}
+            <div style={{ fontSize: '26px', fontWeight: 900, color: verdictColor, marginTop: '2px', letterSpacing: '0.5px' }}>
+              {classification}
             </div>
             <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '4px' }}>
-              Risk Level: <strong>{currentCase?.risk_level}</strong> &bull; System Confidence: <strong>{currentCase?.confidence_level} ({Math.round(currentCase?.confidence_score * 100)}%)</strong>
+              Evidence-based forensic classification derived from {currentCase?.signals.length || 0} active analytical signals.
             </div>
           </div>
 
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#f8fafc' }}>
-              {currentCase?.authenticity_score} <span style={{ fontSize: '16px', color: '#64748b' }}>/ 100</span>
+            <div style={{ fontSize: '22px', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
+              {currentCase?.signals.filter(s => s.status === 'DETECTED' || s.status === 'WARNING').length || 0} / {currentCase?.signals.length || 0}
             </div>
             <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase' }}>
-              AUTHENTICITY INDEX
+              ANOMALOUS SIGNALS
             </div>
           </div>
         </div>
 
-        {/* Probability Matrix 4 Columns */}
+        {/* Forensic Evidence Summary Matrix */}
         <div style={{ marginBottom: '28px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '10px' }}>
-            Probabilistic Metrics Matrix
+          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--magenta-vivid)', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '10px' }}>
+            Forensic Assessment Architecture
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '12px', borderRadius: '6px' }}>
-              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>AI Generation Prob</div>
-              <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: (currentCase?.ai_generation_probability || 0) > 70 ? '#f87171' : '#34d399' }}>
-                {(currentCase?.ai_generation_probability || 0).toFixed(1)}%
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(157, 78, 221, 0.2)' }}>
+              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>VERDICT</div>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: verdictColor, marginTop: '4px' }}>
+                {classification}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '12px', borderRadius: '6px' }}>
-              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Manipulation Risk</div>
-              <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: (currentCase?.manipulation_risk || 0) > 50 ? '#fbbf24' : '#34d399' }}>
-                {(currentCase?.manipulation_risk || 0).toFixed(1)}%
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(157, 78, 221, 0.2)' }}>
+              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>EVIDENCE TYPE</div>
+              <div style={{ fontSize: '16px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#38bdf8', marginTop: '4px' }}>
+                {currentCase?.media_type}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '12px', borderRadius: '6px' }}>
-              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Forensic Anomaly</div>
-              <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#f8fafc' }}>
-                {(currentCase?.forensic_anomaly_score || 0).toFixed(1)}%
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(157, 78, 221, 0.2)' }}>
+              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>PROVENANCE / C2PA</div>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: currentCase?.provenance?.c2pa_status === 'VERIFIED' ? '#34d399' : '#94a3b8', marginTop: '4px' }}>
+                {currentCase?.provenance?.c2pa_status ? currentCase.provenance.c2pa_status.toUpperCase() : 'NOT AVAILABLE'}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '12px', borderRadius: '6px' }}>
-              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Metadata Risk</div>
-              <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#94a3b8' }}>
-                {(currentCase?.metadata_risk_score || 0).toFixed(1)}%
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(157, 78, 221, 0.2)' }}>
+              <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>EVIDENCE INTEGRITY</div>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: '#34d399', marginTop: '4px' }}>
+                SHA-256 VALIDATED
               </div>
             </div>
           </div>
         </div>
+
+        {/* Supporting Evidence Checklist */}
+        {reasonsData && (
+          <div style={{ marginBottom: '28px', background: 'rgba(15, 23, 42, 0.6)', padding: '18px 20px', borderRadius: '10px', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+            <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--magenta-vivid)', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: '12px' }}>
+              SUPPORTING FORENSIC EVIDENCE / WHY?
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+              {reasonsData.reasons.map((r, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: '#f8fafc' }}>
+                  <span style={{ color: r.icon === 'alert' ? '#FF4B72' : r.icon === 'check' ? '#10B981' : '#94A3B8', fontWeight: 900 }}>
+                    {r.icon === 'alert' ? '⚠' : r.icon === 'check' ? '✓' : '○'}
+                  </span>
+                  <span>{r.text}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(157, 78, 221, 0.12)', border: '1px solid rgba(157, 78, 221, 0.3)', fontSize: '12px', color: '#e2e8f0', lineHeight: 1.5 }}>
+              <strong style={{ color: '#FFFFFF' }}>CONCLUSION: </strong>
+              {reasonsData.conclusion}
+            </div>
+          </div>
+        )}
 
         {/* Forensic Signals Table */}
         <div style={{ marginBottom: '28px' }}>
@@ -498,9 +527,14 @@ export const ForensicReportsPage: React.FC<ForensicReportsPageProps> = ({
             <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '8px 12px', borderRadius: '4px' }}>
               <span style={{ color: '#64748b' }}>MIME Container:</span> <strong style={{ color: '#f8fafc' }}>{currentCase?.metadata.mime_type}</strong>
             </div>
-            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '8px 12px', borderRadius: '4px', gridColumn: 'span 2' }}>
-              <span style={{ color: '#64748b' }}>SHA-256 Checksum:</span>{' '}
-              <strong style={{ fontFamily: 'var(--font-mono)', color: '#00f0ff' }}>{currentCase?.metadata.hash_sha256}</strong>
+            <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '10px 14px', borderRadius: '4px', gridColumn: 'span 2' }}>
+              <div>
+                <span style={{ color: '#64748b' }}>SHA-256 Checksum:</span>{' '}
+                <strong style={{ fontFamily: 'var(--font-mono)', color: '#00f0ff', wordBreak: 'break-all' }}>{currentCase?.metadata.hash_sha256}</strong>
+              </div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '6px', fontStyle: 'italic' }}>
+                SHA-256 provides a digital fingerprint of the submitted evidence. If the file changes, its hash changes.
+              </div>
             </div>
           </div>
         </div>

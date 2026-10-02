@@ -63,6 +63,7 @@ class ForensicApiService {
     if (sampleId) {
       formData.append('sample_id', sampleId);
     }
+    formData.append('fallback', 'true');
 
     const endpoint = `${BACKEND_URL}/analyze/${mediaType.toLowerCase()}`;
     const res = await fetch(endpoint, {

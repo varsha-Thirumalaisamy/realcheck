@@ -139,20 +139,22 @@ export const Header: React.FC<HeaderProps> = ({
             <div
               className="desktop-only-flex"
               style={{
-                height: '34px',
+                height: '36px',
                 width: isSearchOpen ? '320px' : '250px',
-                background: isSearchOpen ? 'var(--bg-card-solid)' : 'var(--bg-deep)',
-                border: isSearchOpen ? '1px solid var(--cyan-primary)' : '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '0 10px',
+                background: '#140B1E',
+                border: isSearchOpen ? '1px solid var(--violet-electric)' : '1px solid rgba(157, 78, 221, 0.28)',
+                borderRadius: '9999px',
+                padding: '0 14px',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: isSearchOpen ? '0 0 14px rgba(0, 240, 255, 0.2)' : 'none',
-                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: isSearchOpen 
+                  ? '0 8px 24px rgba(157, 78, 221, 0.35), inset 2px 2px 4px rgba(0, 0, 0, 0.6)' 
+                  : 'inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -1px -1px 3px rgba(255, 255, 255, 0.08)',
+                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                 boxSizing: 'border-box'
               }}
             >
-              <Search size={14} color="var(--cyan-primary)" style={{ flexShrink: 0 }} />
+              <Search size={14} color="var(--magenta-vivid)" style={{ flexShrink: 0 }} />
               <input
                 type="text"
                 value={searchQuery}
@@ -375,19 +377,20 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setIsTelemetryOpen(!isTelemetryOpen)}
               onMouseEnter={() => setIsTelemetryOpen(true)}
               style={{
-                height: '34px',
+                height: '36px',
                 alignItems: 'center',
                 gap: '8px',
-                background: 'var(--risk-low-bg)',
-                border: '1px solid var(--risk-low-border)',
-                padding: '0 12px',
-                borderRadius: '8px',
+                background: '#1F132B',
+                border: '1px solid rgba(199, 36, 177, 0.35)',
+                padding: '0 14px',
+                borderRadius: '9999px',
                 fontSize: '11px',
                 fontWeight: 700,
-                color: 'var(--risk-low-text)',
+                color: '#FFFFFF',
                 cursor: 'pointer',
                 boxSizing: 'border-box',
-                transition: 'all 0.2s ease'
+                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.45), inset 2px 2px 4px rgba(255, 255, 255, 0.12), inset -2px -2px 5px rgba(0, 0, 0, 0.6)',
+                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
               title="Click to view forensic pipeline telemetry"
             >
@@ -396,12 +399,13 @@ export const Header: React.FC<HeaderProps> = ({
               <span
                 style={{
                   fontSize: '9px',
-                  padding: '1px 6px',
-                  borderRadius: '4px',
-                  background: 'rgba(16, 185, 129, 0.18)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  color: 'var(--risk-low-text)',
-                  lineHeight: 1.3
+                  fontWeight: 800,
+                  padding: '2px 7px',
+                  borderRadius: '9999px',
+                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  boxShadow: '0 2px 6px rgba(16, 185, 129, 0.35), inset 1px 1px 2px rgba(255, 255, 255, 0.4)',
+                  color: '#FFFFFF',
+                  lineHeight: 1.2
                 }}
               >
                 ONLINE
@@ -413,16 +417,16 @@ export const Header: React.FC<HeaderProps> = ({
               <div
                 style={{
                   position: 'absolute',
-                  top: '42px',
+                  top: '44px',
                   right: 0,
                   width: '300px',
                   background: 'var(--bg-card-solid)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  boxShadow: '0 12px 28px rgba(0,0,0,0.3)',
+                  borderRadius: '16px',
+                  padding: '16px',
+                  boxShadow: 'var(--clay-box-shadow)',
                   zIndex: 100,
-                  backdropFilter: 'blur(16px)'
+                  backdropFilter: 'blur(20px)'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -466,27 +470,28 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setIsCaseMenuOpen(!isCaseMenuOpen)}
               className="desktop-only-flex"
               style={{
-                height: '34px',
+                height: '36px',
                 alignItems: 'center',
                 gap: '8px',
-                background: 'var(--bg-deep)',
-                border: isCaseMenuOpen ? '1px solid var(--cyan-primary)' : '1px solid var(--border-subtle)',
-                padding: '0 10px',
-                borderRadius: '8px',
+                background: '#1F132B',
+                border: isCaseMenuOpen ? '1px solid var(--magenta-vivid)' : '1px solid rgba(157, 78, 221, 0.3)',
+                padding: '0 14px',
+                borderRadius: '9999px',
                 cursor: 'pointer',
                 boxSizing: 'border-box',
-                transition: 'all 0.2s ease'
+                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.45), inset 2px 2px 4px rgba(255, 255, 255, 0.1), inset -2px -2px 5px rgba(0, 0, 0, 0.6)',
+                transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
               title="Click to switch active investigation dossier"
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {currentCase && getMediaIcon(currentCase.media_type)}
                 <span
                   style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: '11px',
                     fontWeight: 700,
-                    color: 'var(--cyan-primary)'
+                    color: '#FFFFFF'
                   }}
                 >
                   {activeCaseId}
@@ -494,7 +499,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <ChevronDown
                 size={13}
-                color="var(--text-dim)"
+                color="var(--text-muted)"
                 style={{
                   transform: isCaseMenuOpen ? 'rotate(180deg)' : 'none',
                   transition: 'transform 0.2s ease'
@@ -507,14 +512,14 @@ export const Header: React.FC<HeaderProps> = ({
               <div
                 style={{
                   position: 'absolute',
-                  top: '42px',
+                  top: '44px',
                   right: 0,
                   width: '340px',
                   background: 'var(--bg-card-solid)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  boxShadow: '0 16px 36px rgba(0,0,0,0.35), 0 0 20px rgba(0, 240, 255, 0.08)',
+                  borderRadius: '16px',
+                  padding: '14px',
+                  boxShadow: 'var(--clay-box-shadow)',
                   zIndex: 100,
                   backdropFilter: 'blur(20px)'
                 }}

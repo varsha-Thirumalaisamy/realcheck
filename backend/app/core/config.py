@@ -39,12 +39,6 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str | None = None
     SMTP_FROM_NAME: str = "REALCHECK AI"
 
-    @field_validator("SMTP_PORT", mode="before")
-    @classmethod
-    def parse_smtp_port(cls, v):
-        if v is None or v == "":
-            return 587
-        return int(v)
     
     FRONTEND_URL: str = "http://localhost:5173"
     # Enterprise & External APIs

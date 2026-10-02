@@ -96,21 +96,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           alignItems: 'center',
           gap: isCollapsed && !mobileMenuOpen ? '0' : '12px',
           width: '100%',
-          padding: isCollapsed && !mobileMenuOpen ? '10px 0' : `8px 12px`,
-          paddingLeft: isSubItem && !isCollapsed && !mobileMenuOpen ? '36px' : (isSubItem && mobileMenuOpen ? '36px' : (isCollapsed && !mobileMenuOpen ? '0' : '12px')),
+          padding: isCollapsed && !mobileMenuOpen ? '10px 0' : `10px 14px`,
+          paddingLeft: isSubItem && !isCollapsed && !mobileMenuOpen ? '36px' : (isSubItem && mobileMenuOpen ? '36px' : (isCollapsed && !mobileMenuOpen ? '0' : '14px')),
           justifyContent: isCollapsed && !mobileMenuOpen ? 'center' : 'flex-start',
-          background: isActive ? 'var(--bg-body-pattern-1)' : 'transparent',
-          color: isActive ? 'var(--cyan-primary)' : 'var(--text-main)',
-          border: 'none',
-          borderRadius: '6px',
+          background: isActive ? 'linear-gradient(135deg, #C724B1 0%, #9D4EDD 100%)' : 'transparent',
+          color: isActive ? '#FFFFFF' : 'var(--text-muted)',
+          border: isActive ? '1px solid rgba(255, 255, 255, 0.25)' : 'none',
+          borderRadius: '12px',
           cursor: 'pointer',
-          transition: 'all 0.2s',
+          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
           fontSize: '14px',
-          fontWeight: isActive ? 600 : 500,
+          fontWeight: isActive ? 700 : 500,
+          boxShadow: isActive ? '0 8px 18px rgba(157, 78, 221, 0.4), inset 2px 2px 4px rgba(255, 255, 255, 0.3), inset -2px -2px 4px rgba(0, 0, 0, 0.45)' : 'none',
         }}
         title={isCollapsed && !mobileMenuOpen ? label : undefined}
       >
-        <Icon size={18} style={{ minWidth: '18px' }} />
+        <Icon size={18} style={{ minWidth: '18px' }} color={isActive ? '#FFFFFF' : 'var(--text-dim)'} />
         {(!isCollapsed || mobileMenuOpen) && <span>{label}</span>}
       </button>
     );
@@ -140,17 +141,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
-            position: 'relative', width: '32px', height: '32px', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', background: 'var(--bg-body-pattern-1)',
-            border: '1px solid var(--cyan-primary)', borderRadius: '6px',
-            boxShadow: '0 0 10px var(--border-glow)', flexShrink: 0
+            position: 'relative', width: '34px', height: '34px', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', background: '#1F132B',
+            border: '1px solid rgba(157, 78, 221, 0.35)', borderRadius: '10px',
+            boxShadow: '0 6px 14px rgba(0, 0, 0, 0.4), inset 2px 2px 4px rgba(255, 255, 255, 0.15), inset -2px -2px 4px rgba(0, 0, 0, 0.6)', flexShrink: 0
           }}>
-            <Crosshair size={18} color="var(--cyan-primary)" />
+            <Crosshair size={18} color="var(--magenta-vivid)" />
           </div>
           {(!isCollapsed || mobileMenuOpen) && (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '1px', color: 'var(--text-main)' }}>
-                REALCHECK <span style={{ fontSize: '11px', background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-text)', padding: '2px 4px', borderRadius: '4px', verticalAlign: 'middle' }}>AI</span>
+                REALCHECK <span style={{ fontSize: '10px', background: 'var(--btn-primary-bg)', color: '#FFFFFF', padding: '2px 6px', borderRadius: '9999px', verticalAlign: 'middle', fontWeight: 800, boxShadow: '0 2px 6px rgba(157, 78, 221, 0.4)' }}>AI</span>
               </span>
             </div>
           )}
@@ -178,10 +179,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => handleTabClick('new-investigation')}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-text)',
-            border: 'none', borderRadius: '8px', padding: isCollapsed && !mobileMenuOpen ? '10px 0' : '10px',
-            cursor: 'pointer', fontWeight: 600, fontSize: '14px', transition: 'all 0.2s',
-            boxShadow: '0 4px 14px rgba(0, 210, 255, 0.2)'
+            background: 'var(--btn-primary-bg)', color: '#FFFFFF',
+            border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '9999px', padding: isCollapsed && !mobileMenuOpen ? '10px 0' : '10px 16px',
+            cursor: 'pointer', fontWeight: 700, fontSize: '13px', transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+            boxShadow: '0 10px 24px rgba(157, 78, 221, 0.45), inset 2px 2px 5px rgba(255, 255, 255, 0.35), inset -3px -3px 6px rgba(0, 0, 0, 0.45)'
           }}
           title={isCollapsed && !mobileMenuOpen ? "New Investigation" : undefined}
         >

@@ -43,25 +43,27 @@ def db_model_to_pydantic(db_inv: Investigation) -> InvestigationResult:
         model_verification=db_inv.heatmap_data.get("model_verification") if isinstance(db_inv.heatmap_data, dict) else None
     )
 
+from ..forensics.database import INVESTIGATIONS_DB
+
 @router.get("/")
 def list_investigations(db: Session = Depends(get_db)):
     investigations = db.query(Investigation).order_by(Investigation.created_at.desc()).all()
-    return [db_model_to_pydantic(inv) for inv in investigations]
-
-@router.get("/{case_id}")
-def get_investigation(case_id: str, db: Session = Depends(get_db)):
-    investigation = db.query(Investigation).filter(Investigation.case_id == case_id).first()
-    if not investigation:
-        raise HTTPException(status_code=404, detail=f"Case ID {case_id} not found")
-    return db_model_to_pydantic(investigation)
+    results = [db_model_to_pydantic(inv) for inv in investigations]
+    existing_ids = {r.case_id for r in results}
+    for cid, sample_inv in INVESTIGATIONS_DB.items():
+        if cid not in existing_ids:
+            results.append(sample_inv)
+    return results
 
 @router.get("/reports/{case_id}")
 def get_report(case_id: str, format: str = "json", db: Session = Depends(get_db)):
     investigation = db.query(Investigation).filter(Investigation.case_id == case_id).first()
-    if not investigation:
+    if investigation:
+        result = db_model_to_pydantic(investigation)
+    elif case_id in INVESTIGATIONS_DB:
+        result = INVESTIGATIONS_DB[case_id]
+    else:
         raise HTTPException(status_code=404, detail="Case not found")
-        
-    result = db_model_to_pydantic(investigation)
     
     if format == "csv":
         csv_content = ForensicReportGenerator.generate_csv(result)
@@ -71,3 +73,12 @@ def get_report(case_id: str, format: str = "json", db: Session = Depends(get_db)
         return Response(content=html_content, media_type="text/html")
     else:
         return json.loads(ForensicReportGenerator.generate_json(result))
+
+@router.get("/{case_id}")
+def get_investigation(case_id: str, db: Session = Depends(get_db)):
+    investigation = db.query(Investigation).filter(Investigation.case_id == case_id).first()
+    if investigation:
+        return db_model_to_pydantic(investigation)
+    if case_id in INVESTIGATIONS_DB:
+        return INVESTIGATIONS_DB[case_id]
+    raise HTTPException(status_code=404, detail=f"Case ID {case_id} not found")

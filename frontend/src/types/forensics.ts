@@ -21,7 +21,7 @@ export interface ForensicSignal {
   score: number;        // 0-100 anomaly / suspicion score
   weight: number;       // contribution weight (0.0 - 1.0)
   strength: 'Strong' | 'Moderate' | 'Weak' | 'Normal';
-  status: 'Anomaly Detected' | 'Suspicious Pattern' | 'Within Normal Variance' | 'Inconclusive';
+  status: 'Anomaly Detected' | 'Suspicious Pattern' | 'Within Normal Variance' | 'Inconclusive' | string;
   explanation: string;
   affected_region_or_time?: string;
   model_contribution_pct: number;
@@ -88,6 +88,14 @@ export interface TextMetrics {
   analyzed_text_sample: string;
 }
 
+export interface ProvenanceData {
+  c2pa_status?: string;
+  manifest_found?: boolean;
+  issuer?: string;
+  signature_valid?: boolean;
+  claim_generator?: string;
+}
+
 export interface InvestigationResult {
   case_id: string;
   media_type: MediaType;
@@ -110,6 +118,7 @@ export interface InvestigationResult {
   signals: ForensicSignal[];
   evidence_breakdown: EvidenceCardItem[];
   metadata: MetadataAnalysis;
+  provenance?: ProvenanceData;
 
   suspicious_regions?: SuspiciousRegion[];
   suspicious_segments?: SuspiciousTimeSegment[];
@@ -134,6 +143,8 @@ export interface InvestigationResult {
     model_version: string;
     weights_path: string;
     model_path?: string;
+    provider?: string;
+    api_endpoint?: string;
     device: string;
     input_shape: string;
     raw_logits: { real: number; fake: number };

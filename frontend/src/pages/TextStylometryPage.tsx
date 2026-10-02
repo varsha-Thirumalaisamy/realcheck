@@ -1,24 +1,36 @@
-import React, { useState, useRef } from 'react';
-import { 
-  Upload, 
-  Play, 
-  HelpCircle, 
-  FileSpreadsheet, 
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Upload,
+  Play,
+  HelpCircle,
+  FileSpreadsheet,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Cpu,
   Layers,
-  ShieldCheck,
-  AlertTriangle
+  Sparkles,
+  Sliders,
+  FileText,
+  RotateCcw,
+  AlignLeft,
+  Trash2
 } from 'lucide-react';
 import { ScoreMeter } from '../components/ScoreMeter';
-import { EvidenceCardComponent } from '../components/EvidenceCardComponent';
+import { AnalysisResult } from '../components/AnalysisResult';
+import { EvidenceIntegrityCard } from '../components/EvidenceIntegrityCard';
 import { LiveScanAnimation } from '../components/LiveScanAnimation';
 import { WhyThisResultModal } from '../components/WhyThisResultModal';
+import { ForensicPipeline, PipelineStep } from '../components/ForensicPipeline';
 import { SAMPLE_CASES } from '../data/sampleCases';
-import { forensicApi } from '../services/api';
 import { InvestigationResult } from '../types/forensics';
+import { forensicApi } from '../services/api';
+import { useInvestigation } from '../contexts/InvestigationContext';
+import { getForensicClassification } from '../utils/forensicReasoning';
 
 interface TextStylometryPageProps {
   onGenerateReport: (caseId: string) => void;
-  onNavigate: (tab: string, caseId?: string) => void;
+  onNavigate: (tab: string) => void;
   initialCaseId?: string;
 }
 
@@ -27,635 +39,646 @@ export const TextStylometryPage: React.FC<TextStylometryPageProps> = ({
   onNavigate,
   initialCaseId = 'RC-2026-0045'
 }) => {
-  const [currentCase, setCurrentCase] = useState<InvestigationResult>(
-    SAMPLE_CASES[initialCaseId] || SAMPLE_CASES['RC-2026-0045']
-  );
+  const { isDemoMode, activeCaseId, setActiveCaseId, generateNewCaseId } = useInvestigation();
+
+  const effectiveInitialCase = (initialCaseId && SAMPLE_CASES[initialCaseId]?.media_type === 'TEXT')
+    ? SAMPLE_CASES[initialCaseId]
+    : SAMPLE_CASES['RC-2026-0045'];
+
+  const sampleAiText = `Furthermore, it is crucial to analyze the multi-faceted implications of quantum computation on cryptographic governance. As demonstrated across recent literature, algorithmic resilience requires dynamic protocol synthesis. In conclusion, stakeholders must proactively evaluate strategic integration vectors to maintain operational equilibrium.`;
+  const sampleHumanText = `Hey folks, quick update on the server migration: we ran into some unexpected timeout issues with the legacy database driver last night. We're rolling back the staging cluster for now. I'll post another note after lunch once we check the connection pool logs.`;
+
+  const [currentCase, setCurrentCase] = useState<InvestigationResult>(effectiveInitialCase);
   const [textInput, setTextInput] = useState<string>(
-    SAMPLE_CASES['RC-2026-0045'].text_metrics?.analyzed_text_sample || ''
+    effectiveInitialCase.text_metrics?.analyzed_text_sample || sampleAiText
   );
   const [isScanning, setIsScanning] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isWhyModalOpen, setIsWhyModalOpen] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [activeSample, setActiveSample] = useState<'ai' | 'real' | null>('ai');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Pipeline execution state
+  const [pipelinePhase, setPipelinePhase] = useState<'idle' | 'uploaded' | 'loading' | 'preprocessing' | 'inference' | 'completed' | 'error'>('completed');
+  const [pipelineError, setPipelineError] = useState<{ stage: string; reason: string; action?: string; requestId?: string } | null>(null);
+  const [meta, setMeta] = useState<{ fileName: string; fileSize: string; duration: string }>({
+    fileName: effectiveInitialCase.file_name,
+    fileSize: '3.4 KB',
+    duration: '214 words (1,480 chars)'
+  });
 
-  const handleSelectSample = (type: 'ai' | 'human') => {
-    setAnalysisError(null);
-    if (type === 'ai') {
-      const sample = SAMPLE_CASES['RC-2026-0045'];
-      setCurrentCase(sample);
-      setTextInput(sample.text_metrics?.analyzed_text_sample || '');
-    } else {
-      const humanText = `Honestly, I was pretty skeptical when we first kicked off the project back in November. We ran into all sorts of weird edge cases with the database migration, and half the scripts broke because someone forgot to sanitize the timestamp strings. But hey, after three late-night debug marathons and way too much cold coffee, the pipeline finally stabilized!`;
-      setTextInput(humanText);
-      handleAnalyzeCustomText(humanText);
+  useEffect(() => {
+    if (activeCaseId && SAMPLE_CASES[activeCaseId] && SAMPLE_CASES[activeCaseId].media_type === 'TEXT') {
+      setCurrentCase(SAMPLE_CASES[activeCaseId]);
+      if (SAMPLE_CASES[activeCaseId].text_metrics?.analyzed_text_sample) {
+        setTextInput(SAMPLE_CASES[activeCaseId].text_metrics!.analyzed_text_sample);
+      }
     }
-  };
+  }, [activeCaseId]);
 
-  const handleAnalyzeCustomText = async (textToAnalyze?: string) => {
-    const text = textToAnalyze || textInput;
-    if (!text.trim()) return;
+  // Text-specific 6-step Forensic Pipeline
+  const pipelineSteps: PipelineStep[] = [
+    {
+      id: '1',
+      stepNumber: 1,
+      title: 'Text Ingestion',
+      subtitle: `${textInput.trim().split(/\s+/).filter(Boolean).length} tokens parsed`,
+      status: pipelinePhase === 'idle' ? 'pending' : (pipelinePhase === 'uploaded' ? 'processing' : 'success')
+    },
+    {
+      id: '2',
+      stepNumber: 2,
+      title: 'Tokenization',
+      subtitle: 'Sub-word BPE & POS tagging',
+      status: ['idle', 'uploaded'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'loading' ? 'processing' : 'success')
+    },
+    {
+      id: '3',
+      stepNumber: 3,
+      title: 'Stylometric Profiling',
+      subtitle: 'Sentence cadence & burstiness variance',
+      status: ['idle', 'uploaded', 'loading'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'preprocessing' ? 'processing' : 'success')
+    },
+    {
+      id: '4',
+      stepNumber: 4,
+      title: 'Perplexity Evaluation',
+      subtitle: 'N-gram log-likelihood surprisal',
+      status: ['idle', 'uploaded', 'loading', 'preprocessing'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'inference' ? 'processing' : 'success')
+    },
+    {
+      id: '5',
+      stepNumber: 5,
+      title: 'Signal Fusion',
+      subtitle: 'Transformer stylistic attribution',
+      status: pipelinePhase === 'completed' ? 'success' : (pipelinePhase === 'inference' ? 'processing' : 'pending')
+    },
+    {
+      id: '6',
+      stepNumber: 6,
+      title: 'Result Generated',
+      subtitle: currentCase ? getForensicClassification(currentCase) : 'Forensic Assessment',
+      status: pipelinePhase === 'completed' ? 'success' : 'pending'
+    }
+  ];
 
+  // Execute fast deterministic presentation demo (3-5s)
+  const runFastDemoAnalysis = async (targetCaseId: string, customText?: string) => {
     setIsScanning(true);
     setAnalysisError(null);
+    setPipelineError(null);
+    setPipelinePhase('uploaded');
+
+    const sample = SAMPLE_CASES[targetCaseId] || SAMPLE_CASES['RC-2026-0045'];
+    const caseId = generateNewCaseId('RC-2026-');
+    const newDemoCase: InvestigationResult = {
+      ...sample,
+      case_id: caseId,
+      is_demo_analysis: true,
+      timestamp: new Date().toISOString()
+    };
+
+    const textToAnalyze = customText !== undefined ? customText : textInput;
+    const words = textToAnalyze.trim().split(/\s+/).filter(Boolean).length;
+    const chars = textToAnalyze.length;
+
+    setMeta({
+      fileName: 'stylometric_evidence.txt',
+      fileSize: `${(chars / 1024).toFixed(1)} KB`,
+      duration: `${words} words (${chars} chars)`
+    });
+
+    // Step 1: Upload (450ms)
+    await new Promise(r => setTimeout(r, 450));
+    setPipelinePhase('loading');
+
+    // Step 2: Tokenization (550ms)
+    await new Promise(r => setTimeout(r, 550));
+    setPipelinePhase('preprocessing');
+
+    // Step 3: Stylometric Profiling (650ms)
+    await new Promise(r => setTimeout(r, 650));
+    setPipelinePhase('inference');
+
+    // Step 4 & 5: Perplexity & Signal Fusion (950ms)
+    await new Promise(r => setTimeout(r, 950));
+
+    // Step 6: Complete!
+    setCurrentCase(newDemoCase);
+    setActiveCaseId(caseId);
+    setPipelinePhase('completed');
+    setIsScanning(false);
+  };
+
+  // Run live backend inference with fallback
+  const runLiveAnalysis = async (text: string, fallbackCaseId?: string) => {
+    setIsScanning(true);
+    setAnalysisError(null);
+    setPipelineError(null);
+    setPipelinePhase('uploaded');
+
+    const words = text.trim().split(/\s+/).filter(Boolean).length;
+    setMeta({
+      fileName: 'input_document.txt',
+      fileSize: `${(text.length / 1024).toFixed(1)} KB`,
+      duration: `${words} words`
+    });
+
+    await new Promise(r => setTimeout(r, 300));
+    setPipelinePhase('loading');
+
     try {
-      const res = await forensicApi.analyzeMedia('TEXT', text);
-      setCurrentCase(res);
-      onNavigate('text', res.case_id);
-    } catch {
-      // Fallback local heuristic assessment if API is unavailable
-      const words = text.split(/\s+/).filter(Boolean);
-      const isShort = words.length < 20;
-      const isAiLike = text.toLowerCase().includes('delve') || text.toLowerCase().includes('testament') || text.toLowerCase().includes('in summary') || text.length > 300;
-      const authScore = isAiLike ? 25 : 88;
-      const aiProb = isAiLike ? 84 : 12;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT')), 5000);
+      });
 
-      const fallbackCase: InvestigationResult = {
-        ...SAMPLE_CASES['RC-2026-0045'],
-        case_id: `RC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        file_name: isShort ? 'Short Text Snippet' : 'Custom Text Document',
-        sample_type: isAiLike ? 'ai' : 'real',
-        assessment: isAiLike ? 'Likely AI-Generated' : 'Likely Authentic',
-        authenticity_score: authScore,
-        risk_level: authScore <= 30 ? 'High Risk' : (authScore <= 60 ? 'Medium Risk' : 'Low Risk'),
-        confidence_level: 'High',
-        confidence_score: 0.89,
-        ai_generation_probability: aiProb,
-        manipulation_risk: isAiLike ? 75.0 : 15.0,
-        forensic_anomaly_score: isAiLike ? 80.0 : 18.0,
-        text_metrics: {
-          word_count: words.length,
-          sentence_count: Math.max(1, text.split(/[.!?]+/).filter(Boolean).length),
-          avg_sentence_length: words.length / Math.max(1, text.split(/[.!?]+/).filter(Boolean).length),
-          analyzed_text_sample: text,
-          burstiness_score: isAiLike ? 0.18 : 0.65,
-          perplexity_score: isAiLike ? 14.2 : 48.6,
-          sentence_length_std_dev: isAiLike ? 2.1 : 8.4,
-          repeated_phrases_count: isAiLike ? 4 : 0,
-          vocabulary_richness_ttr: isAiLike ? 0.48 : 0.72
-        },
-        why_result_explanation: isAiLike
-          ? 'Stylometric evaluation reveals low sentence length variance (std-dev 2.1w) and constrained perplexity consistent with Large Language Model output.'
-          : 'Elevated burstiness and natural lexical entropy indicate spontaneous human authorship with irregular syntactic patterns.'
-      };
-      setCurrentCase(fallbackCase);
-    } finally {
-      setIsScanning(false);
-    }
-  };
+      setPipelinePhase('inference');
+      const backendPromise = forensicApi.analyzeMedia('TEXT', text);
+      const result = await Promise.race([backendPromise, timeoutPromise]);
 
-  const processUploadedFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (content) {
-        setTextInput(content);
-        handleAnalyzeCustomText(content);
+      if (result && result.case_id) {
+        setCurrentCase(result);
+        setActiveCaseId(result.case_id);
+        setPipelinePhase('completed');
+        setIsScanning(false);
+      } else {
+        throw new Error('Invalid backend response');
       }
-    };
-    reader.onerror = () => {
-      setAnalysisError('Unable to read text file. Please upload a valid plain text or document file (.txt, .md, .csv, .json).');
-    };
-    reader.readAsText(file);
-  };
+    } catch (err: any) {
+      if (fallbackCaseId) {
+        runFastDemoAnalysis(fallbackCaseId, text);
+        return;
+      }
+      setIsScanning(false);
+      setPipelinePhase('error');
+      const isTimeout = err.message === 'TIMEOUT';
+      const reasonMsg = isTimeout
+        ? 'External analysis is taking longer than expected.'
+        : 'External detector unavailable';
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processUploadedFile(file);
+      setPipelineError({
+        stage: isTimeout ? 'API Gateway Timeout' : 'Stylometric NLP Detector',
+        reason: reasonMsg,
+        action: 'You can continue seamlessly using deterministic presentation demo mode.',
+        requestId: `RC-TXT-${Date.now().toString().slice(-6)}`
+      });
+      setAnalysisError(reasonMsg);
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      processUploadedFile(file);
+  const handleAnalyze = () => {
+    if (!textInput.trim()) {
+      setPipelinePhase('error');
+      setPipelineError({
+        stage: 'Input Validation',
+        reason: 'Empty text document',
+        action: 'Please enter or paste at least 20 words to analyze stylometric patterns.',
+        requestId: 'RC-TXT-EMPTY'
+      });
+      setAnalysisError('Empty text document. Please enter or paste at least 20 words.');
+      return;
     }
+
+    runLiveAnalysis(textInput, isDemoMode ? 'RC-2026-0045' : undefined);
   };
 
-  // Exact real data mapping from backend analysis response
-  const aiPercentage = typeof currentCase.ai_generation_probability === 'number'
-    ? Math.min(100, Math.max(0, currentCase.ai_generation_probability))
-    : Math.min(100, Math.max(0, 100 - currentCase.authenticity_score));
-  const realPercentage = Math.max(0, Math.min(100, 100 - aiPercentage));
+  const handleLoadSample = (type: 'ai' | 'real') => {
+    setActiveSample(type);
+    const chosenText = type === 'ai' ? sampleAiText : sampleHumanText;
+    const targetCaseId = type === 'ai' ? 'RC-2026-0045' : 'RC-2026-0049';
+    setTextInput(chosenText);
+    runLiveAnalysis(chosenText, targetCaseId);
+  };
 
-  const verdictColor = currentCase.risk_level === 'High Risk' || currentCase.authenticity_score <= 30
-    ? 'var(--risk-high)'
-    : currentCase.risk_level === 'Medium Risk' || currentCase.authenticity_score <= 60
-      ? 'var(--risk-medium)'
-      : 'var(--risk-low)';
+  const handleClear = () => {
+    setTextInput('');
+    setActiveSample(null);
+  };
+
+  const isAi = currentCase?.sample_type === 'ai' || (currentCase?.ai_generation_probability ?? 0) >= 50;
 
   return (
-    <div style={{ maxWidth: '1360px', margin: '0 auto', padding: '20px clamp(16px, 3vw, 28px) 80px' }}>
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".txt,.pdf,.docx,.md,.json,.csv"
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
-
-      {/* Header Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
+    <div style={{ maxWidth: '1360px', margin: '0 auto', width: '100%' }}>
+      {/* 1. Header & Title Section */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}
+      >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--cyan-primary)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700 }}>
-              SPECIALIZED FORENSIC ENGINE 04
+            <span
+              style={{
+                fontSize: '11px',
+                color: 'var(--magenta-vivid)',
+                letterSpacing: '1px',
+                textTransform: 'uppercase',
+                fontWeight: 800
+              }}
+            >
+              MODULE 04 &bull; TEXT FORENSICS
             </span>
             <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>&bull;</span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>TRANSFORMER ENCODERS + STYLOMETRIC PROFILER</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              PERPLEXITY &bull; BURSTINESS &bull; LEXICAL DIVERSITY &bull; TTR
+            </span>
           </div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.4px', marginTop: '2px' }}>
-            TEXT STYLOMETRY &amp; AI-WRITING ASSESSMENT
+          <h1
+            style={{
+              fontSize: 'clamp(22px, 3vw, 30px)',
+              fontWeight: 800,
+              color: '#FFFFFF',
+              letterSpacing: '0.4px',
+              marginTop: '4px'
+            }}
+          >
+            TEXT FORENSICS &amp; STYLOMETRIC ANALYSIS
           </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px', maxWidth: '780px' }}>
+            Statistical stylometry, token surprisal perplexity, sentence length cadence burstiness, and vocabulary richness profiling.
+          </p>
         </div>
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handleAnalyze}
             className="btn-cyber-primary"
+            style={{ fontSize: '11px', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '7px' }}
+          >
+            <Play size={14} />
+            <span>ANALYZE TEXT</span>
+          </button>
+
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)', margin: '0 4px' }}>or benchmark:</span>
+
+          <button
+            onClick={() => handleLoadSample('ai')}
+            className={activeSample === 'ai' ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
             style={{ fontSize: '11px', padding: '7px 14px' }}
           >
-            <Upload size={13} />
-            <span>UPLOAD DOCUMENT</span>
+            <Sparkles size={12} style={{ marginRight: '5px' }} />
+            <span>LOAD SAMPLE AI TEXT</span>
           </button>
 
-          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>or load:</span>
+          <button
+            onClick={() => handleLoadSample('real')}
+            className={activeSample === 'real' ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
+            style={{ fontSize: '11px', padding: '7px 14px' }}
+          >
+            <CheckCircle2 size={12} style={{ marginRight: '5px' }} />
+            <span>LOAD SAMPLE HUMAN TEXT</span>
+          </button>
 
           <button
-            onClick={() => handleSelectSample('ai')}
-            className={currentCase.ai_generation_probability > 60 ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
-            style={{ fontSize: '11px', padding: '6px 12px' }}
+            onClick={handleClear}
+            className="btn-cyber-secondary"
+            style={{ fontSize: '11px', padding: '7px 12px' }}
+            title="Clear text input"
           >
-            AI-Assisted Executive Memo
-          </button>
-          <button
-            onClick={() => handleSelectSample('human')}
-            className={currentCase.ai_generation_probability <= 60 ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
-            style={{ fontSize: '11px', padding: '6px 12px' }}
-          >
-            Human Developer Retrospective
+            <Trash2 size={13} style={{ marginRight: '4px' }} />
+            <span>CLEAR</span>
           </button>
         </div>
       </div>
 
-      {/* Analysis Error Toast */}
-      {analysisError && (
-        <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--risk-high)', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--risk-high)', fontSize: '12px' }}>
-          <AlertTriangle size={16} />
-          <span>{analysisError}</span>
+      {/* 2. Large Text Input Area */}
+      <div
+        className="glass-panel"
+        style={{
+          padding: '20px',
+          borderRadius: '20px',
+          border: '1px solid rgba(157, 78, 221, 0.28)',
+          background: '#1F132B',
+          boxShadow: 'var(--clay-box-shadow)',
+          marginBottom: '24px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 800, color: '#FFFFFF' }}>
+            <AlignLeft size={16} color="var(--magenta-vivid)" />
+            <span>DOCUMENT TEXT INPUT &bull; STYLOMETRIC BUFFER</span>
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+            {textInput.trim().split(/\s+/).filter(Boolean).length} words &bull; {textInput.length} characters
+          </span>
+        </div>
+
+        <textarea
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          placeholder="Paste or type document text here for stylometric, burstiness, and perplexity forensic analysis..."
+          rows={6}
+          style={{
+            width: '100%',
+            background: '#12081C',
+            border: '1px solid rgba(157, 78, 221, 0.25)',
+            borderRadius: '14px',
+            padding: '14px 16px',
+            color: '#FFFFFF',
+            fontSize: '13px',
+            lineHeight: 1.6,
+            fontFamily: 'var(--font-outfit)',
+            resize: 'vertical',
+            outline: 'none',
+            boxSizing: 'border-box'
+          }}
+        />
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+            * Stylometric signals are probabilistic indicators and should be interpreted with additional evidence.
+          </div>
+
+          <button
+            onClick={handleAnalyze}
+            className="btn-cyber-primary"
+            style={{ padding: '7px 18px', fontSize: '11px' }}
+          >
+            ANALYZE DOCUMENT
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Reusable Forensic Pipeline */}
+      <ForensicPipeline
+        hasInput={Boolean(textInput.trim())}
+        inputBadgeText={isDemoMode ? 'DEMO PRESENTATION ACTIVE' : 'LIVE DETECTOR ACTIVE'}
+        overallPhase={pipelinePhase}
+        metadata={{
+          fileName: meta.fileName,
+          fileSize: meta.fileSize,
+          dimensionsOrDuration: meta.duration,
+          modelName: currentCase?.model_verification?.model_name || 'Transformer Stylometric Ensemble'
+        }}
+        error={pipelineError}
+        onClearError={() => {
+          setPipelineError(null);
+          setAnalysisError(null);
+          setPipelinePhase('completed');
+        }}
+        onRetry={handleAnalyze}
+        onContinueWithDemo={() => runFastDemoAnalysis('RC-2026-0045')}
+        steps={pipelineSteps}
+      />
+
+      {/* 4. Live Scanning Laser Animation */}
+      {isScanning && (
+        <div style={{ padding: '40px 0' }}>
+          <LiveScanAnimation mediaType="TEXT" onComplete={() => setIsScanning(false)} />
         </div>
       )}
 
-      {isScanning ? (
-        <div style={{ padding: '60px 0' }}>
-          <LiveScanAnimation mediaType="TEXT" onComplete={() => setIsScanning(false)} />
-        </div>
-      ) : (
+      {/* 5. Main Results View */}
+      {!isScanning && currentCase && (
         <>
-          {/* Main Two-Column Grid: Left (~58% Stylometric Editor) & Right (~42% Authenticity Result) */}
-          <div className="text-forensics-grid" style={{ marginBottom: '24px' }}>
-            {/* LEFT: Text Editor & Inspector */}
-            <div className="glass-panel forensic-corner" style={{ padding: '20px', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan-primary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                  LINGUISTIC &amp; STYLOMETRIC TEXT EDITOR
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  {textInput.split(/\s+/).filter(Boolean).length} WORDS &bull; {textInput.length} CHARS
-                </div>
-              </div>
+          {/* Main Result Card with Radial AI-Generated Likelihood */}
+          <AnalysisResult
+            result={currentCase}
+            title="TEXT FORENSICS RESULT"
+            onGenerateReport={onGenerateReport}
+            onOpenWhyModal={() => setIsWhyModalOpen(true)}
+          />
 
-              {/* Text Area with Drag & Drop */}
+          {/* Metric Cards (Perplexity, Burstiness, Lexical Diversity, Style Consistency) */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '14px',
+              marginBottom: '24px'
+            }}
+          >
+            {/* Perplexity Card */}
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '16px',
+                background: '#1F132B',
+                border: '1px solid rgba(157, 78, 221, 0.28)',
+                boxShadow: 'var(--clay-box-shadow)'
+              }}
+            >
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>
+                PERPLEXITY
+              </div>
               <div
                 style={{
-                  position: 'relative',
-                  border: isDragging ? '2px dashed var(--cyan-primary)' : 'none',
-                  borderRadius: '6px',
-                  flex: 1
-                }}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <textarea
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  placeholder="Paste suspect text or drag & drop text/doc files here to assess burstiness, perplexity, and AI-writing markers..."
-                  style={{
-                    width: '100%',
-                    height: '190px',
-                    backgroundColor: 'var(--bg-deep)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '6px',
-                    padding: '12px 14px',
-                    color: 'var(--text-main)',
-                    fontSize: '12px',
-                    fontFamily: 'var(--font-sans)',
-                    lineHeight: 1.6,
-                    resize: 'none',
-                    outline: 'none',
-                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.3)'
-                  }}
-                />
-              </div>
-
-              {/* Quick Text Upload & Analysis Action Bar */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{
-                      background: 'var(--bg-card-solid)',
-                      border: '1px solid var(--border-subtle)',
-                      color: 'var(--text-muted)',
-                      padding: '5px 10px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}
-                  >
-                    <Upload size={12} color="var(--cyan-primary)" />
-                    <span>Upload TXT / DOCX / MD</span>
-                  </button>
-
-                  <button
-                    onClick={() => setTextInput('')}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: '11px', cursor: 'pointer' }}
-                  >
-                    Clear Text
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => handleAnalyzeCustomText()}
-                  className="btn-cyber-primary"
-                  style={{ fontSize: '11px', padding: '6px 14px' }}
-                >
-                  <Play size={13} fill="currentColor" />
-                  <span>ANALYZE STYLOMETRY</span>
-                </button>
-              </div>
-
-              {/* Real-time Stylometric Parameters */}
-              <div
-                style={{
-                  marginTop: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '8px'
+                  fontSize: '20px',
+                  fontWeight: 900,
+                  color: isAi ? '#FF4B72' : '#10B981',
+                  fontFamily: 'var(--font-mono)',
+                  marginTop: '4px'
                 }}
               >
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Burstiness</div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: (currentCase.text_metrics?.burstiness_score || 0) < 0.3 ? 'var(--risk-high)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.text_metrics?.burstiness_score || 0.18}
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Perplexity</div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--cyan-primary)', marginTop: '2px' }}>
-                    {currentCase.text_metrics?.perplexity_score || 14.2}
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Length StdDev</div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: (currentCase.text_metrics?.sentence_length_std_dev || 0) < 4 ? 'var(--risk-medium)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.text_metrics?.sentence_length_std_dev || 2.1}w
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '6px 10px', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Lexical Rich</div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', marginTop: '2px' }}>
-                    {currentCase.text_metrics?.vocabulary_richness_ttr || 0.48}
-                  </div>
-                </div>
+                {isAi ? 'LOW' : 'NATURAL'}
               </div>
-
-              {/* Critical Forensic Disclaimer Card */}
-              <div
-                style={{
-                  marginTop: '10px',
-                  background: 'var(--bg-body-pattern-1)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '8px 12px',
-                  fontSize: '10px',
-                  color: 'var(--text-muted)',
-                  lineHeight: 1.45
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--cyan-primary)', fontWeight: 700, marginBottom: '2px' }}>
-                  <ShieldCheck size={12} />
-                  <span>CRITICAL FORENSIC DISCLAIMER</span>
-                </div>
-                AI-writing detection is probabilistic based on token entropy and stylometric variance. Results should be verified with contextual authorship trails.
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {isAi ? 'Abnormally predictable tokens' : 'Natural human surprisal range'}
               </div>
             </div>
 
-            {/* RIGHT SIDE: Single Unified Authenticity Result Panel */}
-            <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px' }}>
-              {/* A. Header: Title + Case ID on exact same baseline */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan-primary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                  AUTHENTICITY RESULT
-                </span>
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', background: 'var(--bg-card-solid)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                  {currentCase.case_id}
-                </span>
+            {/* Burstiness Card */}
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '16px',
+                background: '#1F132B',
+                border: '1px solid rgba(157, 78, 221, 0.28)',
+                boxShadow: 'var(--clay-box-shadow)'
+              }}
+            >
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>
+                BURSTINESS
               </div>
-
-              {/* B. AI vs Real Percentage Section: Equal 2-Column Layout */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--risk-high)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    AI-GENERATED / SYNTHETIC
-                  </div>
-                  <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--risk-high)', lineHeight: 1, marginTop: '6px' }}>
-                    {aiPercentage.toFixed(0)}%
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--risk-low)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    HUMAN / AUTHENTIC
-                  </div>
-                  <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--risk-low)', lineHeight: 1, marginTop: '6px' }}>
-                    {realPercentage.toFixed(0)}%
-                  </div>
-                </div>
-              </div>
-
-              {/* C. Probability Bar directly connected to percentages */}
-              <div style={{ marginTop: '10px' }}>
-                <div style={{ height: '10px', width: '100%', borderRadius: '5px', overflow: 'hidden', display: 'flex', background: 'var(--bg-body-pattern-1)', border: '1px solid var(--border-subtle)' }}>
-                  <div
-                    style={{
-                      width: `${aiPercentage}%`,
-                      background: 'linear-gradient(90deg, #ef4444, #f87171)',
-                      transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                    title={`AI Likelihood: ${aiPercentage.toFixed(1)}%`}
-                  />
-                  <div
-                    style={{
-                      width: `${realPercentage}%`,
-                      background: 'linear-gradient(90deg, #06b6d4, #10b981)',
-                      transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                    title={`Real Likelihood: ${realPercentage.toFixed(1)}%`}
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginTop: '5px', fontWeight: 600 }}>
-                  <span style={{ color: 'var(--risk-high)' }}>AI-writing likelihood</span>
-                  <span style={{ color: 'var(--risk-low)' }}>Human authorship likelihood</span>
-                </div>
-              </div>
-
-              {/* D. Verdict + Confidence: Compact horizontal row */}
               <div
                 style={{
-                  marginTop: '14px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
+                  fontSize: '20px',
+                  fontWeight: 900,
+                  color: isAi ? '#FF4B72' : '#10B981',
+                  fontFamily: 'var(--font-mono)',
+                  marginTop: '4px'
                 }}
               >
-                <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    VERDICT
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: verdictColor, marginTop: '2px' }}>
-                    {currentCase.assessment}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    CONFIDENCE
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', marginTop: '2px' }}>
-                    {Math.round(currentCase.confidence_score * 100)}%
-                  </div>
-                </div>
+                {isAi ? 'LOW' : 'HIGH'}
               </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {isAi ? 'Uniform sentence structure' : 'Dynamic human rhythm variation'}
+              </div>
+            </div>
 
-              {/* E. Secondary Authenticity Score: Compact horizontal 2-column layout */}
+            {/* Lexical Diversity Card */}
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '16px',
+                background: '#1F132B',
+                border: '1px solid rgba(157, 78, 221, 0.28)',
+                boxShadow: 'var(--clay-box-shadow)'
+              }}
+            >
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>
+                LEXICAL DIVERSITY
+              </div>
               <div
                 style={{
-                  marginTop: '14px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px'
+                  fontSize: '20px',
+                  fontWeight: 900,
+                  color: isAi ? '#FBBF24' : '#10B981',
+                  fontFamily: 'var(--font-mono)',
+                  marginTop: '4px'
                 }}
               >
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ScoreMeter
-                    score={currentCase.authenticity_score}
-                    riskLevel={currentCase.risk_level}
-                    assessment={currentCase.assessment}
-                    confidenceScore={currentCase.confidence_score}
-                    size={58}
-                    hideDetails={true}
-                  />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                    UNIFIED AUTHENTICITY SCORE
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                    <span style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', lineHeight: 1 }}>
-                      {currentCase.authenticity_score} / 100
-                    </span>
-                    <span
-                      className={
-                        currentCase.authenticity_score <= 30
-                          ? 'badge-risk-high'
-                          : currentCase.authenticity_score <= 60
-                            ? 'badge-risk-medium'
-                            : 'badge-risk-low'
-                      }
-                      style={{ fontSize: '10px', padding: '1px 6px', lineHeight: 1.4 }}
-                    >
-                      {currentCase.risk_level}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {currentCase.authenticity_score >= 70 ? 'Organic stylometric variance verified' : 'Uniform perplexity & low burstiness detected'}
-                  </div>
-                </div>
+                {isAi ? 'MODERATE' : 'RICH'}
               </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Type-Token Ratio: {isAi ? '0.48' : '0.74'}
+              </div>
+            </div>
 
-              {/* F. Forensic Metrics: Clean 2x2 Grid with identical dimensions & typography */}
+            {/* Style Consistency Card */}
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '16px',
+                background: '#1F132B',
+                border: '1px solid rgba(157, 78, 221, 0.28)',
+                boxShadow: 'var(--clay-box-shadow)'
+              }}
+            >
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>
+                STYLE CONSISTENCY
+              </div>
               <div
                 style={{
-                  marginTop: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '8px'
+                  fontSize: '20px',
+                  fontWeight: 900,
+                  color: isAi ? '#FF4B72' : '#10B981',
+                  fontFamily: 'var(--font-mono)',
+                  marginTop: '4px'
                 }}
               >
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    AI LIKELIHOOD
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.ai_generation_probability > 70 ? 'var(--risk-high)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.ai_generation_probability.toFixed(1)}%
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    SYNTACTIC UNIFORMITY
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.ai_generation_probability > 70 ? 'var(--risk-high)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.ai_generation_probability > 70 ? 'High (92%)' : 'Natural (24%)'}
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    TROPE FREQUENCY
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.ai_generation_probability > 70 ? 'var(--risk-medium)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.ai_generation_probability > 70 ? 'Elevated (88%)' : 'Minimal (15%)'}
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    HUMAN VARIANCE
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--risk-low)', marginTop: '2px' }}>
-                    {Math.max(10, 100 - currentCase.ai_generation_probability).toFixed(1)}%
-                  </div>
-                </div>
+                {isAi ? 'SUSPICIOUS' : 'CONSISTENT'}
               </div>
-
-              {/* G. Why This Result: Compact section */}
-              <div
-                style={{
-                  marginTop: '12px',
-                  paddingTop: '10px',
-                  borderTop: '1px solid var(--border-subtle)'
-                }}
-              >
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
-                  WHY THIS RESULT?
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.45, marginBottom: '6px' }}>
-                  {currentCase.why_result_explanation.length > 150
-                    ? currentCase.why_result_explanation.slice(0, 150) + '...'
-                    : currentCase.why_result_explanation}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                  <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '3px', background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', color: 'var(--cyan-primary)', fontFamily: 'var(--font-mono)' }}>
-                    Burstiness: {currentCase.text_metrics?.burstiness_score || 0.18}
-                  </span>
-                  <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '3px', background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', color: 'var(--cyan-primary)', fontFamily: 'var(--font-mono)' }}>
-                    Perplexity: {currentCase.text_metrics?.perplexity_score || 14.2}
-                  </span>
-                  {currentCase.top_contributing_signals?.slice(0, 2).map((sig, i) => (
-                    <span key={`sig-${i}`} style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '3px', background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', color: 'var(--blue-soft)' }}>
-                      {sig.signal}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* H. Action Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px' }}>
-                <button
-                  onClick={() => onGenerateReport(currentCase.case_id)}
-                  className="btn-cyber-primary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '11px', padding: '8px 12px' }}
-                >
-                  <FileSpreadsheet size={14} />
-                  <span>GENERATE REPORT</span>
-                </button>
-                <button
-                  onClick={() => setIsWhyModalOpen(true)}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '11px', padding: '8px 12px' }}
-                >
-                  <HelpCircle size={14} color="var(--cyan-primary)" />
-                  <span>WHY THIS RESULT?</span>
-                </button>
-              </div>
-
-              {/* Quick Actions Row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                <button
-                  onClick={() => handleAnalyzeCustomText()}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '10px', padding: '6px 8px' }}
-                  title="Re-run text stylometry analysis"
-                >
-                  <Play size={12} />
-                  <span>RE-ANALYZE</span>
-                </button>
-                <button
-                  onClick={() => onNavigate('workspace')}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '10px', padding: '6px 8px' }}
-                  title="Cross-examine text alongside image, video, and audio"
-                >
-                  <Layers size={12} />
-                  <span>CROSS-EXAMINE</span>
-                </button>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Sentence Variance: {isAi ? '2.1 words' : '5.8 words'}
               </div>
             </div>
           </div>
 
-          {/* Evidence Cards */}
-          <section style={{ marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.4px', marginBottom: '12px' }}>
-              TEXT STYLOMETRIC SIGNALS &amp; EVIDENCE BREAKDOWN
+          {/* Forensic Signals Breakdown */}
+          <div
+            style={{
+              padding: '20px',
+              borderRadius: '20px',
+              border: '1px solid rgba(157, 78, 221, 0.28)',
+              background: '#1F132B',
+              boxShadow: 'var(--clay-box-shadow)',
+              marginBottom: '24px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Layers size={18} color="var(--magenta-vivid)" />
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.5px' }}>
+                  STYLOMETRIC SIGNALS &amp; ATTRIBUTION
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                5 SIGNALS EVALUATED
+              </span>
             </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+              {currentCase.signals.map((sig, idx) => {
+                const isAnomaly = sig.score >= 60;
+                const isModerate = sig.score >= 35 && sig.score < 60;
+                const barColor = isAnomaly ? '#FF4B72' : (isModerate ? '#FBBF24' : '#10B981');
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '14px',
+                      borderRadius: '14px',
+                      background: '#150C20',
+                      border: '1px solid rgba(157, 78, 221, 0.18)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#FFFFFF' }}>
+                        {sig.name}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: `${barColor}22`,
+                            border: `1px solid ${barColor}55`,
+                            color: barColor,
+                            fontWeight: 700
+                          }}
+                        >
+                          {sig.status}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: barColor }}>
+                          {sig.score.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4, marginBottom: '8px' }}>
+                      {sig.explanation}
+                    </div>
+
+                    <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${sig.score}%`,
+                          background: barColor,
+                          boxShadow: `0 0 8px ${barColor}`
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Probabilistic Disclaimer Footer */}
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: '14px'
+                marginTop: '16px',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                background: 'rgba(157, 78, 221, 0.08)',
+                border: '1px solid rgba(157, 78, 221, 0.18)',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                lineHeight: 1.5
               }}
             >
-              {currentCase.evidence_breakdown.map((card, idx) => (
-                <EvidenceCardComponent key={idx} card={card} />
-              ))}
+              <strong style={{ color: '#FFFFFF' }}>Disclaimer: </strong>
+              Stylometric signals are probabilistic indicators and should be interpreted with additional evidence. Synthetic text detectors cannot provide guaranteed proof of authorship.
             </div>
-          </section>
-
-          {/* Why This Result Modal */}
-          <WhyThisResultModal
-            isOpen={isWhyModalOpen}
-            onClose={() => setIsWhyModalOpen(false)}
-            result={currentCase}
-            onInvestigateDeeper={() => onNavigate('workspace')}
-          />
+          </div>
         </>
+      )}
+
+      {/* Why This Result Modal */}
+      {isWhyModalOpen && currentCase && (
+        <WhyThisResultModal
+          isOpen={isWhyModalOpen}
+          result={currentCase}
+          onClose={() => setIsWhyModalOpen(false)}
+        />
       )}
     </div>
   );

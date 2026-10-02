@@ -3,7 +3,6 @@ import {
   ShieldCheck, 
   ArrowRight, 
   Search, 
-  Sliders, 
   AlertTriangle, 
   Activity, 
   Image as ImageIcon, 
@@ -14,11 +13,13 @@ import {
   ExternalLink,
   Layers,
   Sparkles,
-  Zap
+  Zap,
+  Fingerprint,
+  Cpu
 } from 'lucide-react';
-import { AuthenticityCore } from '../components/AuthenticityCore';
 import { SAMPLE_CASES } from '../data/sampleCases';
 import { InvestigationResult } from '../types/forensics';
+import { useInvestigation } from '../contexts/InvestigationContext';
 
 interface OverviewPageProps {
   onNavigate: (tab: string) => void;
@@ -26,368 +27,505 @@ interface OverviewPageProps {
 }
 
 export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate, onSelectCase }) => {
-  const [selectedPipelineStage, setSelectedPipelineStage] = useState<number | null>(0);
+  const { isDemoMode } = useInvestigation();
 
-  const pipelineStages = [
-    { name: 'DIGITAL CONTENT', desc: 'Raw ingestion of Image, Video, Audio, or Text documents.' },
-    { name: 'FILE VALIDATION', desc: 'MIME validation, hex magic byte verification & SHA-256 hashing.' },
-    { name: 'MEDIA CLASSIFICATION', desc: 'Routing stream to designated specialized forensic micro-service.' },
-    { name: 'SPECIALIZED ENGINE', desc: 'Spatial-temporal, Fourier frequency, or NLP tokenizer processing.' },
-    { name: 'FEATURE EXTRACTION', desc: 'Deriving PRNU noise residuals, biometrics, landmark optical flow.' },
-    { name: 'AI MODEL INFERENCE', desc: 'ViT, 3D-CNN, Wav2Vec2, and Transformer Stylometry neural networks.' },
-    { name: 'FORENSIC SIGNALS', desc: 'Individual probabilistic metrics scored with calibration weights.' },
-    { name: 'EVIDENCE FUSION', desc: 'Cross-evidence mathematical synthesis and conflict resolution.' },
-    { name: 'EXPLAINABLE AI', desc: 'Grad-CAM heatmaps, token saliency & temporal attribution paths.' },
-    { name: 'AUTHENTICITY ASSESSMENT', desc: 'Probabilistic determination (Likely Real / AI-Generated / Uncertain).' },
-    { name: 'FORENSIC REPORT', desc: 'Cryptographically timestamped PDF docket, JSON, and CSV export.' }
+  // 4 Multimodal Cards Data
+  const modalityCards = [
+    {
+      id: 'image',
+      title: 'IMAGE',
+      subtitle: 'Spatial & Fourier Frequency Forensics',
+      icon: ImageIcon,
+      count: '612',
+      latestCaseId: 'RC-2026-0042',
+      latestFile: 'synthetic_portrait.jpg',
+      latestResult: 'LIKELY AI-GENERATED',
+      evidenceSummary: 'PRNU residual mismatch, high-frequency anomaly',
+      status: 'Analyzed',
+      isAnomaly: true,
+      color: 'var(--magenta-vivid)',
+      tech: 'PRNU &bull; ELA &bull; Fourier &bull; C2PA'
+    },
+    {
+      id: 'video',
+      title: 'VIDEO',
+      subtitle: 'Temporal Consistency & Optical Flow',
+      icon: VideoIcon,
+      count: '340',
+      latestCaseId: 'RC-2026-0043',
+      latestFile: 'face_swap.mp4',
+      latestResult: 'LIKELY MANIPULATED',
+      evidenceSummary: 'Inter-frame delta jitter, temporal discontinuity',
+      status: 'Analyzed',
+      isAnomaly: true,
+      color: 'var(--violet-electric)',
+      tech: 'Landmarks &bull; Optical Flow &bull; Frame Delta'
+    },
+    {
+      id: 'audio',
+      title: 'AUDIO',
+      subtitle: 'Mel-Spectrogram & Acoustic Features',
+      icon: Mic,
+      count: '284',
+      latestCaseId: 'RC-2026-0044',
+      latestFile: 'synthetic_voice.wav',
+      latestResult: 'LIKELY AI-GENERATED',
+      evidenceSummary: 'Vocoder roll-off anomaly, low spectral variance',
+      status: 'Analyzed',
+      isAnomaly: true,
+      color: '#38BDF8',
+      tech: 'Spectrogram &bull; Roll-Off &bull; ZCR &bull; Pitch'
+    },
+    {
+      id: 'text',
+      title: 'TEXT',
+      subtitle: 'Stylometry, Perplexity & Burstiness',
+      icon: FileText,
+      count: '192',
+      latestCaseId: 'RC-2026-0045',
+      latestFile: 'executive_brief_memo.txt',
+      latestResult: 'LIKELY AI-GENERATED',
+      evidenceSummary: 'Low surprisal, compressed sentence burstiness',
+      status: 'Analyzed',
+      isAnomaly: true,
+      color: '#A78BFA',
+      tech: 'Surprisal &bull; Burstiness &bull; TTR &bull; Stylometry'
+    }
   ];
 
-  const recentCases = Object.values(SAMPLE_CASES);
+  // Recent Investigations table records
+  const recentInvestigations = [
+    {
+      id: 'RC-2026-0042',
+      media: 'Image',
+      mediaType: 'IMAGE',
+      fileName: 'synthetic_portrait.jpg',
+      assessment: 'LIKELY AI-GENERATED',
+      signals: 'MSCN anomaly, PRNU residual mismatch',
+      integrity: 'SHA-256 Validated',
+      status: 'Analyzed',
+      isAnomaly: true,
+      isDemo: true
+    },
+    {
+      id: 'RC-2026-0044',
+      media: 'Audio',
+      mediaType: 'AUDIO',
+      fileName: 'synthetic_voice.wav',
+      assessment: 'LIKELY AI-GENERATED',
+      signals: 'Vocoder roll-off anomaly, spectral cutoff',
+      integrity: 'SHA-256 Validated',
+      status: 'Analyzed',
+      isAnomaly: true,
+      isDemo: true
+    },
+    {
+      id: 'RC-2026-0043',
+      media: 'Video',
+      mediaType: 'VIDEO',
+      fileName: 'face_swap.mp4',
+      assessment: 'LIKELY MANIPULATED',
+      signals: 'Inter-frame delta jitter, temporal anomaly',
+      integrity: 'SHA-256 Validated',
+      status: 'Analyzed',
+      isAnomaly: true,
+      isDemo: true
+    },
+    {
+      id: 'RC-2026-0045',
+      media: 'Text',
+      mediaType: 'TEXT',
+      fileName: 'executive_brief_memo.txt',
+      assessment: 'LIKELY AI-GENERATED',
+      signals: 'Low perplexity, compressed burstiness',
+      integrity: 'SHA-256 Validated',
+      status: 'Analyzed',
+      isAnomaly: true,
+      isDemo: true
+    },
+    {
+      id: 'RC-2026-0046',
+      media: 'Image',
+      mediaType: 'IMAGE',
+      fileName: 'nikon_raw.jpg',
+      assessment: 'LIKELY REAL',
+      signals: 'Hardware EXIF match, natural PRNU',
+      integrity: 'SHA-256 Validated',
+      status: 'Analyzed',
+      isAnomaly: false,
+      isDemo: true
+    },
+    {
+      id: 'RC-2026-0047',
+      media: 'Video',
+      mediaType: 'VIDEO',
+      fileName: 'authentic_video.mp4',
+      assessment: 'LIKELY REAL',
+      signals: 'Smooth optical flow, natural frame delta',
+      integrity: 'SHA-256 Validated',
+      status: 'Analyzed',
+      isAnomaly: false,
+      isDemo: true
+    }
+  ];
 
   return (
-    <div style={{ maxWidth: '1360px', margin: '0 auto', padding: '20px clamp(16px, 3vw, 28px) 80px', width: '100%' }}>
-      {/* 1. HERO SECTION */}
-      <section style={{ textAlign: 'center', padding: '24px 16px 20px', position: 'relative' }}>
+    <div style={{ maxWidth: '1360px', margin: '0 auto', width: '100%' }}>
+      {/* 1. HERO HEADER */}
+      <section style={{ textAlign: 'center', padding: '20px 16px 28px', position: 'relative' }}>
         <div
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            background: 'var(--bg-body-pattern-1)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '20px',
+            background: 'rgba(157, 78, 221, 0.15)',
+            border: '1px solid rgba(157, 78, 221, 0.35)',
+            borderRadius: '9999px',
             padding: '5px 16px',
             fontSize: '11px',
-            fontWeight: 700,
+            fontWeight: 800,
             letterSpacing: '1px',
-            color: 'var(--cyan-primary)',
+            color: 'var(--magenta-vivid)',
             textTransform: 'uppercase',
             marginBottom: '14px'
           }}
         >
-          <Sparkles size={12} />
-          <span>One Platform &bull; Four Media Types &bull; Explainable Digital Authenticity</span>
+          <Sparkles size={13} />
+          <span>REALCHECK AI &bull; MULTIMODAL DIGITAL FORENSICS</span>
         </div>
 
         <h1
           style={{
-            fontSize: 'clamp(28px, 3.8vw, 42px)',
-            fontWeight: 800,
-            lineHeight: 1.22,
+            fontSize: 'clamp(28px, 4vw, 42px)',
+            fontWeight: 900,
+            lineHeight: 1.2,
             letterSpacing: '-0.5px',
-            color: 'var(--text-main)',
+            color: '#FFFFFF',
             maxWidth: '850px',
-            margin: '0 auto 14px',
+            margin: '0 auto 12px',
             textAlign: 'center'
           }}
         >
-          Digital Content Can Look Real.
-          <br />
-          <span
-            style={{
-              background: 'linear-gradient(135deg, var(--cyan-primary) 0%, var(--blue-soft) 50%, #818cf8 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              display: 'inline-block',
-              marginTop: '4px'
-            }}
-          >
-            Evidence Tells the Story.
-          </span>
+          Unified Forensic Investigation Platform
         </h1>
 
         <p
           style={{
-            fontSize: '15px',
+            fontSize: '14px',
             lineHeight: 1.6,
             color: 'var(--text-muted)',
-            maxWidth: '740px',
-            margin: '0 auto 22px',
+            maxWidth: '720px',
+            margin: '0 auto 24px',
             textAlign: 'center'
           }}
         >
-          REALCHECK AI investigates images, videos, audio and text using specialized AI and forensic analysis — then explains the evidence behind every authenticity assessment.
+          Comprehensive cross-modal digital authenticity auditing across Image, Video, Audio, and Text. Combines deep neural representations, spatial-temporal continuity, and cryptographic provenance.
         </p>
 
-        {/* Hero Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '16px' }}>
+        {/* Quick Launch Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button
             onClick={() => onNavigate('image')}
             className="btn-cyber-primary"
-            style={{ padding: '11px 22px', fontSize: '13px' }}
+            style={{ padding: '10px 22px', fontSize: '12px', fontWeight: 800 }}
           >
-            <span>START INVESTIGATION</span>
-            <ArrowRight size={15} />
+            <span>LAUNCH IMAGE FORENSICS</span>
+            <ArrowRight size={14} />
           </button>
 
           <button
-            onClick={() => onNavigate('ai-hub')}
+            onClick={() => onNavigate('workspace')}
             className="btn-cyber-secondary"
-            style={{ padding: '10px 20px', fontSize: '13px' }}
+            style={{ padding: '10px 20px', fontSize: '12px', fontWeight: 700 }}
           >
-            <Layers size={15} />
-            <span>EXPLORE FORENSICS</span>
+            <Layers size={14} />
+            <span>INVESTIGATION WORKSPACE</span>
           </button>
-        </div>
-
-        {/* Hero Visual: Digital Evidence Core */}
-        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
-          <AuthenticityCore onNavigateEngine={(engine) => onNavigate(engine)} />
         </div>
       </section>
 
-      {/* 2. OVERVIEW DASHBOARD METRICS */}
-      <section style={{ marginTop: '24px', marginBottom: '36px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+      {/* 2. FOUR MAIN MULTIMODAL CARDS */}
+      <section style={{ marginBottom: '36px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.5px' }}>
-              INVESTIGATION PULSE & METRICS
+            <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.4px' }}>
+              MULTIMODAL FORENSIC MODULES
             </h2>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Live telemetry aggregated across all four forensic inspection micro-engines
+              Four specialized micro-engines engineered for verifiable authenticity assessment
             </p>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--cyan-primary)', fontFamily: 'var(--font-mono)' }}>
-            UPDATED: JUST NOW
+          <div
+            style={{
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              color: isDemoMode ? '#F472B6' : '#34D399',
+              background: isDemoMode ? 'rgba(199, 36, 177, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+              padding: '4px 10px',
+              borderRadius: '9999px',
+              border: `1px solid ${isDemoMode ? 'var(--magenta-vivid)' : '#10B981'}`
+            }}
+          >
+            {isDemoMode ? 'MODE: FAST DEMO (3-5s)' : 'MODE: LIVE DETECTOR API'}
           </div>
         </div>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-            gap: '12px'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '16px'
           }}
         >
-          {[
-            { label: 'Total Investigations', value: '1,428', sub: '+38 today', color: 'var(--cyan-primary)' },
-            { label: 'Images Analyzed', value: '612', sub: 'ViT + FFT', color: 'var(--blue-soft)' },
-            { label: 'Videos Analyzed', value: '340', sub: 'Spatial-Temporal', color: '#60a5fa' },
-            { label: 'Audio Analyzed', value: '284', sub: 'Spectrogram + Vocoder', color: 'var(--cyan-muted)' },
-            { label: 'Texts Analyzed', value: '192', sub: 'Stylometric NLP', color: '#818cf8' },
-            { label: 'High-Risk Findings', value: '241', sub: 'Elevated anomalies', color: 'var(--risk-high)' },
-            { label: 'Uncertain Findings', value: '48', sub: 'Mixed signals', color: 'var(--text-dim)' },
-          ].map((metric, idx) => (
-            <div
-              key={idx}
-              className="glass-panel"
-              style={{
-                padding: '14px 16px',
-                borderLeft: `4px solid ${metric.color}`,
-                background: 'var(--bg-card)'
-              }}
-            >
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {metric.label}
-              </div>
-              <div
-                style={{
-                  fontSize: '24px',
-                  fontWeight: 800,
-                  fontFamily: 'var(--font-mono)',
-                  color: 'var(--text-main)',
-                  margin: '4px 0 2px'
-                }}
-              >
-                {metric.value}
-              </div>
-              <div style={{ fontSize: '10px', color: metric.color, fontFamily: 'var(--font-mono)' }}>
-                {metric.sub}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 3. MAIN FORENSIC PIPELINE INTERACTIVE MAP */}
-      <section className="glass-panel forensic-corner" style={{ padding: '24px', marginBottom: '36px' }}>
-        <div style={{ marginBottom: '18px' }}>
-          <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.5px' }}>
-            SPECIALIZED FORENSIC PIPELINE ARCHITECTURE
-          </h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Click any processing stage to inspect the technical data contract and evidence extraction criteria
-          </p>
-        </div>
-
-        {/* Horizontal Pipeline Steps */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            overflowX: 'auto',
-            paddingBottom: '12px'
-          }}
-        >
-          {pipelineStages.map((stage, idx) => {
-            const isSelected = selectedPipelineStage === idx;
+          {modalityCards.map((card) => {
+            const Icon = card.icon;
             return (
               <div
-                key={idx}
-                onClick={() => setSelectedPipelineStage(idx)}
+                key={card.id}
+                onClick={() => {
+                  onSelectCase(card.latestCaseId);
+                  onNavigate(card.id);
+                }}
+                className="glass-panel"
                 style={{
-                  minWidth: '130px',
-                  padding: '10px 12px',
-                  borderRadius: '6px',
-                  background: isSelected ? 'var(--bg-body-pattern-1)' : 'var(--bg-card)',
-                  border: isSelected ? '1px solid var(--cyan-primary)' : '1px solid var(--border-subtle)',
+                  padding: '22px',
+                  borderRadius: '20px',
+                  border: '1px solid rgba(157, 78, 221, 0.28)',
+                  background: '#1F132B',
+                  boxShadow: 'var(--clay-box-shadow)',
                   cursor: 'pointer',
-                  textAlign: 'center',
-                  transition: 'all 0.15s ease'
+                  transition: 'all 0.22s ease',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = card.color;
+                  e.currentTarget.style.transform = 'translateY(-3px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(157, 78, 221, 0.28)';
+                  e.currentTarget.style.transform = 'none';
                 }}
               >
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: isSelected ? 'var(--cyan-primary)' : 'var(--text-dim)' }}>
-                  STEP {String(idx + 1).padStart(2, '0')}
+                {/* Header: Icon & Analysis Count */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '12px',
+                        background: 'rgba(157, 78, 221, 0.2)',
+                        border: `1px solid ${card.color}55`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: card.color
+                      }}
+                    >
+                      <Icon size={20} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '15px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '0.6px' }}>
+                        {card.title}
+                      </h3>
+                      <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                        {card.subtitle}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '18px', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#FFFFFF' }}>
+                      {card.count}
+                    </div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-dim)', textTransform: 'uppercase' }}>
+                      Analyzed
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: isSelected ? 'var(--text-main)' : 'var(--text-muted)', marginTop: '2px' }}>
-                  {stage.name}
+
+                {/* Latest Result Banner */}
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '12px',
+                    background: '#150C20',
+                    border: '1px solid rgba(157, 78, 221, 0.18)',
+                    marginBottom: '14px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                      Latest Result
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(16, 185, 129, 0.18)',
+                        color: '#34D399',
+                        fontWeight: 800
+                      }}
+                    >
+                      {card.status}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: card.isAnomaly ? '#FF4B72' : '#10B981', letterSpacing: '0.3px' }}>
+                    {card.latestResult}
+                  </div>
+
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: card.isAnomaly ? '#F472B6' : '#34D399', fontWeight: 800 }}>✓</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {card.evidenceSummary}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Technical Footprint */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-dim)', borderTop: '1px solid rgba(157, 78, 221, 0.15)', paddingTop: '10px' }}>
+                  <div dangerouslySetInnerHTML={{ __html: card.tech }} />
+                  <div style={{ color: card.color, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <span>Launch</span>
+                    <ArrowRight size={11} />
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
-
-        {/* Selected Stage Detail Card */}
-        {selectedPipelineStage !== null && (
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '16px 20px',
-              backgroundColor: 'var(--bg-body-pattern-1)',
-              borderLeft: '4px solid var(--cyan-primary)',
-              border: '1px solid var(--border-subtle)',
-              borderLeftWidth: '4px',
-              borderLeftColor: 'var(--cyan-primary)',
-              borderRadius: '0 8px 8px 0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '20px'
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--cyan-primary)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700 }}>
-                STAGE {selectedPipelineStage + 1}: {pipelineStages[selectedPipelineStage].name}
-              </div>
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
-                {pipelineStages[selectedPipelineStage].desc}
-              </div>
-            </div>
-
-            <button
-              onClick={() => onNavigate('about')}
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--cyan-primary)',
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              Read Specification
-            </button>
-          </div>
-        )}
       </section>
 
-      {/* 4. RECENT INVESTIGATIONS BENCHMARK TABLE */}
-      <section className="glass-panel" style={{ padding: '24px' }}>
+      {/* 3. RECENT INVESTIGATIONS BENCHMARK TABLE */}
+      <section
+        style={{
+          padding: '24px',
+          borderRadius: '20px',
+          border: '1px solid rgba(157, 78, 221, 0.28)',
+          background: '#1F132B',
+          boxShadow: 'var(--clay-box-shadow)',
+          marginBottom: '36px'
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h2 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.5px' }}>
-              RECENT FORENSIC INVESTIGATIONS
+            <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.4px' }}>
+              RECENT INVESTIGATIONS
             </h2>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Standardized probabilistic cases ready for immediate examination
+              Standardized forensic investigations docket with deterministic demonstration benchmarks
             </p>
           </div>
 
           <button
             onClick={() => onNavigate('workspace')}
             className="btn-cyber-secondary"
-            style={{ fontSize: '12px', padding: '6px 14px' }}
+            style={{ fontSize: '11px', padding: '6px 14px' }}
           >
-            <span>Open Multi-Media Case Board</span>
-            <ArrowRight size={14} />
+            <span>Open Workspace Board</span>
+            <ArrowRight size={13} />
           </button>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>
+              <tr style={{ borderBottom: '1px solid rgba(157, 78, 221, 0.2)', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>
                 <th style={{ padding: '12px 14px' }}>Case ID</th>
-                <th style={{ padding: '12px 14px' }}>Target File</th>
-                <th style={{ padding: '12px 14px' }}>Media Type</th>
-                <th style={{ padding: '12px 14px' }}>Model Assessment</th>
-                <th style={{ padding: '12px 14px' }}>Score</th>
-                <th style={{ padding: '12px 14px' }}>Risk</th>
-                <th style={{ padding: '12px 14px' }}>Confidence</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
+                <th style={{ padding: '12px 14px' }}>Modality</th>
+                <th style={{ padding: '12px 14px' }}>Evidence Target</th>
+                <th style={{ padding: '12px 14px' }}>Forensic Assessment</th>
+                <th style={{ padding: '12px 14px' }}>Primary Forensic Evidence</th>
+                <th style={{ padding: '12px 14px' }}>Integrity</th>
+                <th style={{ padding: '12px 14px' }}>Status</th>
+                <th style={{ padding: '12px 14px', textAlign: 'right' }}>Audit</th>
               </tr>
             </thead>
             <tbody>
-              {recentCases.map((c) => {
-                const isHighRisk = c.authenticity_score <= 30;
-                const isMediumRisk = c.authenticity_score > 30 && c.authenticity_score <= 60;
-                const riskBadge = isHighRisk ? 'badge-risk-high' : (isMediumRisk ? 'badge-risk-medium' : 'badge-risk-low');
-
+              {recentInvestigations.map((inv) => {
                 return (
                   <tr
-                    key={c.case_id}
+                    key={inv.id}
                     style={{
-                      borderBottom: '1px solid var(--border-subtle)',
+                      borderBottom: '1px solid rgba(157, 78, 221, 0.12)',
                       transition: 'background 0.15s ease'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-body-pattern-1)'}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(157, 78, 221, 0.08)'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--cyan-primary)', fontWeight: 600 }}>
-                      {c.case_id}
+                    <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--magenta-vivid)', fontWeight: 800 }}>
+                      {inv.id}
                     </td>
-                    <td style={{ padding: '12px 14px', fontSize: '13px', color: 'var(--text-main)', fontWeight: 500 }}>
-                      {c.file_name}
+
+                    <td style={{ padding: '12px 14px', fontSize: '12px', color: '#FFFFFF', fontWeight: 700 }}>
+                      {inv.media}
                     </td>
-                    <td style={{ padding: '12px 14px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {c.media_type === 'IMAGE' && <ImageIcon size={14} color="var(--cyan-primary)" />}
-                        {c.media_type === 'VIDEO' && <VideoIcon size={14} color="var(--blue-soft)" />}
-                        {c.media_type === 'AUDIO' && <Mic size={14} color="var(--cyan-muted)" />}
-                        {c.media_type === 'TEXT' && <FileText size={14} color="#60a5fa" />}
-                        {c.media_type}
-                      </span>
+
+                    <td style={{ padding: '12px 14px', fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {inv.fileName}
                     </td>
-                    <td style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 600, color: isHighRisk ? 'var(--risk-high)' : (isMediumRisk ? 'var(--risk-medium)' : 'var(--risk-low)') }}>
-                      {c.assessment}
+
+                    <td style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 800, color: inv.isAnomaly ? '#FF4B72' : '#10B981' }}>
+                      {inv.assessment}
                     </td>
-                    <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
-                      {c.authenticity_score}/100
+
+                    <td style={{ padding: '12px 14px', fontSize: '12px', color: '#E2E8F0' }}>
+                      {inv.signals}
                     </td>
+
+                    <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#34D399' }}>
+                      {inv.integrity}
+                    </td>
+
                     <td style={{ padding: '12px 14px' }}>
-                      <span className={riskBadge}>{c.risk_level}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            padding: '2px 7px',
+                            borderRadius: '9999px',
+                            fontWeight: 800,
+                            background: 'rgba(16, 185, 129, 0.18)',
+                            color: '#34D399'
+                          }}
+                        >
+                          {inv.status}
+                        </span>
+                        {inv.isDemo && (
+                          <span
+                            style={{
+                              fontSize: '9px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: 'rgba(199, 36, 177, 0.2)',
+                              color: '#F472B6',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 700
+                            }}
+                          >
+                            DEMO
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      {c.confidence_level} ({Math.round(c.confidence_score * 100)}%)
-                    </td>
+
                     <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                       <button
                         onClick={() => {
-                          onSelectCase(c.case_id);
-                          onNavigate(c.media_type.toLowerCase());
+                          onSelectCase(inv.id);
+                          onNavigate(inv.mediaType.toLowerCase());
                         }}
                         style={{
-                          background: 'var(--bg-body-pattern-1)',
-                          border: '1px solid var(--border-subtle)',
-                          color: 'var(--cyan-primary)',
+                          background: 'rgba(157, 78, 221, 0.2)',
+                          border: '1px solid rgba(157, 78, 221, 0.35)',
+                          color: '#FFFFFF',
                           padding: '5px 12px',
-                          borderRadius: '4px',
+                          borderRadius: '6px',
                           fontSize: '11px',
-                          fontWeight: 600,
+                          fontWeight: 700,
                           cursor: 'pointer'
                         }}
                       >

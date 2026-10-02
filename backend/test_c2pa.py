@@ -1,7 +1,7 @@
 import c2pa
 import json
 
-def test_c2pa(file_path, mime_type="image/jpeg"):
+def check_c2pa(file_path, mime_type="image/jpeg"):
     try:
         with open(file_path, "rb") as f:
             try:
@@ -17,4 +17,4 @@ def test_c2pa(file_path, mime_type="image/jpeg"):
 if __name__ == "__main__":
     with open("test_dummy.jpg", "wb") as f:
         f.write(b"123")
-    test_c2pa("test_dummy.jpg")
+    check_c2pa("test_dummy.jpg")

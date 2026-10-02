@@ -1,105 +1,111 @@
-/* REALCHECK AI - Digital Forensics & Authenticity Platform Stylesheet */
+/* REALCHECK AI - Deep Claymorphism Cybersecurity & Forensics Stylesheet */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
 :root, [data-theme='dark'] {
-  /* Dark Mode (Default Forensic Theme) */
-  --bg-deep: #060911;
-  --bg-card: rgba(13, 19, 33, 0.85);
-  --bg-card-solid: #0d1321;
-  --bg-card-hover: rgba(20, 29, 51, 0.95);
-  --border-subtle: rgba(56, 189, 248, 0.18);
-  --border-active: rgba(0, 240, 255, 0.5);
-  --border-glow: 0 0 16px rgba(0, 240, 255, 0.15);
-
-  --cyan-primary: #00f0ff;
-  --cyan-muted: #06b6d4;
-  --blue-soft: #38bdf8;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
-  --text-invert: #030a16;
+  /* Deep Claymorphism Theme Tokens */
+  --bg-deep: #0D0714;               /* Deep obsidian background */
+  --bg-card: #1F132B;               /* Dark plum inflated 3D clay surface */
+  --bg-card-solid: #1F132B;
+  --bg-card-hover: #291839;
   
-  --bg-body-pattern-1: rgba(0, 240, 255, 0.05);
-  --bg-body-gradient-start: rgba(6, 9, 17, 0.85);
-  --bg-body-gradient-end: rgba(6, 9, 17, 1);
+  --border-subtle: rgba(157, 78, 221, 0.22);
+  --border-active: #9D4EDD;
+  --border-glow: 0 0 24px rgba(157, 78, 221, 0.4);
 
-  --btn-primary-bg: linear-gradient(135deg, #00d2ff 0%, #0084ff 100%);
-  --btn-primary-text: #030a16;
-  --btn-secondary-bg: rgba(15, 23, 42, 0.8);
-  --btn-secondary-hover: rgba(30, 58, 95, 0.5);
+  /* Tactile Clay Volume Shadows (Exact User Specification) */
+  --clay-highlight: inset 4px 4px 8px rgba(255, 255, 255, 0.12);
+  --clay-shadow: inset -6px -6px 12px rgba(0, 0, 0, 0.65);
+  --clay-outer: 0 16px 32px rgba(0, 0, 0, 0.5);
+  
+  /* Compound Clay Surfaces */
+  --clay-box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5), inset 4px 4px 8px rgba(255, 255, 255, 0.12), inset -6px -6px 12px rgba(0, 0, 0, 0.65);
+  --clay-box-shadow-hover: 0 20px 40px rgba(0, 0, 0, 0.65), inset 4px 4px 8px rgba(255, 255, 255, 0.18), inset -6px -6px 12px rgba(0, 0, 0, 0.7);
+  --clay-box-inset: inset 3px 3px 6px rgba(0, 0, 0, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 0.08);
 
-  --risk-high-bg: rgba(239, 68, 68, 0.15);
-  --risk-high-border: rgba(239, 68, 68, 0.4);
-  --risk-high-text: #f87171;
+  /* Primary Electric Violet & Vivid Magenta Accents */
+  --violet-electric: #9D4EDD;
+  --magenta-vivid: #C724B1;
+  --cyan-primary: #9D4EDD;
+  --cyan-muted: #C724B1;
+  --blue-soft: #B565F3;
   
-  --risk-medium-bg: rgba(245, 158, 11, 0.15);
-  --risk-medium-border: rgba(245, 158, 11, 0.4);
-  --risk-medium-text: #fbbf24;
+  --text-main: #FFFFFF;             /* High-contrast crisp white typography */
+  --text-muted: #D3C3E5;            /* Soft lavender muted text */
+  --text-dim: #947BA8;              /* Subtle plum dim text */
+  --text-invert: #0D0714;
   
-  --risk-low-bg: rgba(16, 185, 129, 0.15);
-  --risk-low-border: rgba(16, 185, 129, 0.4);
-  --risk-low-text: #34d399;
-  
-  --risk-uncertain-bg: rgba(148, 163, 184, 0.15);
-  --risk-uncertain-border: rgba(148, 163, 184, 0.4);
-  --risk-uncertain-text: #cbd5e1;
+  --bg-body-pattern-1: rgba(157, 78, 221, 0.08);
+  --bg-body-gradient-start: #0D0714;
+  --bg-body-gradient-end: #120A1C;
 
-  --risk-high: #ef4444;
-  --risk-medium: #f59e0b;
-  --risk-low: #10b981;
-  --risk-uncertain: #94a3b8;
+  /* Clay Pill Buttons */
+  --btn-primary-bg: linear-gradient(135deg, #C724B1 0%, #9D4EDD 100%);
+  --btn-primary-text: #FFFFFF;
+  --btn-primary-shadow: 0 10px 24px rgba(157, 78, 221, 0.45), inset 2px 2px 5px rgba(255, 255, 255, 0.35), inset -3px -3px 6px rgba(0, 0, 0, 0.45);
+  --btn-secondary-bg: #1F132B;
+  --btn-secondary-hover: #2B193C;
+  --btn-secondary-shadow: 0 8px 18px rgba(0, 0, 0, 0.45), inset 2px 2px 5px rgba(255, 255, 255, 0.1), inset -3px -3px 6px rgba(0, 0, 0, 0.6);
+
+  /* Risk Badges */
+  --risk-high-bg: rgba(255, 75, 114, 0.16);
+  --risk-high-border: rgba(255, 75, 114, 0.45);
+  --risk-high-text: #FF6B8B;
+  
+  --risk-medium-bg: rgba(245, 158, 11, 0.16);
+  --risk-medium-border: rgba(245, 158, 11, 0.45);
+  --risk-medium-text: #FBBF24;
+  
+  --risk-low-bg: rgba(16, 185, 129, 0.16);
+  --risk-low-border: rgba(16, 185, 129, 0.45);
+  --risk-low-text: #34D399;
+  
+  --risk-uncertain-bg: rgba(148, 163, 184, 0.16);
+  --risk-uncertain-border: rgba(148, 163, 184, 0.45);
+  --risk-uncertain-text: #E2E8F0;
+
+  --risk-high: #FF4B72;
+  --risk-medium: #F59E0B;
+  --risk-low: #10B981;
+  --risk-uncertain: #94A3B8;
 
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 }
 
 [data-theme='light'] {
-  /* Light Mode (Professional/Clean Theme) */
-  --bg-deep: #f8fafc;
-  --bg-card: rgba(255, 255, 255, 0.85);
-  --bg-card-solid: #ffffff;
-  --bg-card-hover: rgba(241, 245, 249, 0.95);
-  --border-subtle: rgba(203, 213, 225, 0.8);
-  --border-active: rgba(14, 165, 233, 0.5);
-  --border-glow: 0 0 16px rgba(14, 165, 233, 0.15);
+  --bg-deep: #F5F1FA;
+  --bg-card: #FFFFFF;
+  --bg-card-solid: #FFFFFF;
+  --bg-card-hover: #F8F5FC;
+  --border-subtle: rgba(157, 78, 221, 0.2);
+  --border-active: #9D4EDD;
+  --border-glow: 0 0 20px rgba(157, 78, 221, 0.2);
 
-  --cyan-primary: #0ea5e9;
-  --cyan-muted: #38bdf8;
-  --blue-soft: #0284c7;
-  --text-main: #0f172a;
-  --text-muted: #475569;
-  --text-dim: #64748b;
-  --text-invert: #ffffff;
-  
-  --bg-body-pattern-1: rgba(14, 165, 233, 0.05);
-  --bg-body-gradient-start: rgba(248, 250, 252, 0.85);
-  --bg-body-gradient-end: rgba(248, 250, 252, 1);
+  --clay-highlight: inset 3px 3px 6px rgba(255, 255, 255, 0.9);
+  --clay-shadow: inset -4px -4px 8px rgba(157, 78, 221, 0.15);
+  --clay-outer: 0 12px 28px rgba(77, 25, 121, 0.08);
+  --clay-box-shadow: 0 12px 28px rgba(77, 25, 121, 0.08), inset 3px 3px 6px rgba(255, 255, 255, 0.9), inset -4px -4px 8px rgba(157, 78, 221, 0.15);
+  --clay-box-shadow-hover: 0 16px 36px rgba(77, 25, 121, 0.12), inset 3px 3px 6px rgba(255, 255, 255, 0.95), inset -4px -4px 8px rgba(157, 78, 221, 0.2);
 
-  --btn-primary-bg: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
-  --btn-primary-text: #ffffff;
-  --btn-secondary-bg: rgba(241, 245, 249, 0.8);
-  --btn-secondary-hover: rgba(226, 232, 240, 0.9);
+  --violet-electric: #8A2BE2;
+  --magenta-vivid: #B81B98;
+  --cyan-primary: #8A2BE2;
+  --cyan-muted: #B81B98;
+  --blue-soft: #7C3AED;
+  --text-main: #180D26;
+  --text-muted: #5E4E6D;
+  --text-dim: #8B7A9B;
+  --text-invert: #FFFFFF;
 
-  --risk-high-bg: rgba(220, 38, 38, 0.15);
-  --risk-high-border: rgba(220, 38, 38, 0.4);
-  --risk-high-text: #b91c1c;
-  
-  --risk-medium-bg: rgba(217, 119, 6, 0.15);
-  --risk-medium-border: rgba(217, 119, 6, 0.4);
-  --risk-medium-text: #b45309;
-  
-  --risk-low-bg: rgba(5, 150, 105, 0.15);
-  --risk-low-border: rgba(5, 150, 105, 0.4);
-  --risk-low-text: #047857;
-  
-  --risk-uncertain-bg: rgba(100, 116, 139, 0.15);
-  --risk-uncertain-border: rgba(100, 116, 139, 0.4);
-  --risk-uncertain-text: #475569;
+  --btn-primary-bg: linear-gradient(135deg, #B81B98 0%, #8A2BE2 100%);
+  --btn-primary-text: #FFFFFF;
+  --btn-secondary-bg: #FFFFFF;
+  --btn-secondary-hover: #F8F5FC;
 
-  --risk-high: #dc2626;
-  --risk-medium: #d97706;
+  --risk-high: #E11D48;
+  --risk-medium: #D97706;
   --risk-low: #059669;
-  --risk-uncertain: #64748b;
+  --risk-uncertain: #64748B;
 }
 
 * {
@@ -115,41 +121,73 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background-image: 
-    radial-gradient(var(--bg-body-pattern-1) 1px, transparent 1px),
+    radial-gradient(ellipse 80% 50% at 50% -15%, rgba(157, 78, 221, 0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 45% at 85% 65%, rgba(199, 36, 177, 0.14) 0%, transparent 60%),
+    radial-gradient(circle at 10% 85%, rgba(77, 25, 121, 0.22) 0%, transparent 55%),
     linear-gradient(180deg, var(--bg-body-gradient-start) 0%, var(--bg-body-gradient-end) 100%);
-  background-size: 28px 28px, 100% 100%;
+  background-size: 100% 100%;
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #080d1a;
+  background: #0D0714;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e3a5f;
-  border-radius: 3px;
+  background: #2D1A3E;
+  border-radius: 9999px;
+  border: 1px solid rgba(157, 78, 221, 0.2);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--cyan-muted);
+  background: var(--violet-electric);
 }
 
-/* Glass Panels */
-.glass-panel {
+/* Inflated 3D Clay Panels & Cards */
+.glass-panel,
+.clay-card {
   background: var(--bg-card);
-  backdrop-filter: blur(14px);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 18px;
   position: relative;
-  transition: all 0.25s ease-in-out;
+  box-shadow: var(--clay-box-shadow);
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.glass-panel:hover {
-  border-color: rgba(56, 189, 248, 0.35);
-  box-shadow: var(--border-glow);
+.glass-panel:hover,
+.clay-card:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(199, 36, 177, 0.38);
+  box-shadow: var(--clay-box-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.glass-panel-glow {
+  background: var(--bg-card);
+  border: 1px solid var(--border-active);
+  box-shadow: var(--clay-box-shadow), var(--border-glow);
+  border-radius: 20px;
+}
+
+/* Inset Clay Sockets (for meters, inputs, code boxes) */
+.clay-inset {
+  background: #140B1E;
+  border-radius: 12px;
+  box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.7), inset -2px -2px 5px rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(157, 78, 221, 0.15);
+}
+
+/* Clay Pills */
+.clay-pill {
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 2px 2px 4px rgba(255, 255, 255, 0.18), inset -2px -2px 4px rgba(0, 0, 0, 0.5);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* High-Tech Forensic Background Layer */
@@ -165,15 +203,15 @@ body {
 .forensic-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.32;
+  filter: blur(110px);
+  opacity: 0.38;
   mix-blend-mode: screen;
   pointer-events: none;
   animation: floatOrb 22s infinite alternate ease-in-out;
 }
 
 [data-theme='light'] .forensic-orb {
-  opacity: 0.15;
+  opacity: 0.18;
   mix-blend-mode: multiply;
   filter: blur(120px);
 }
@@ -181,18 +219,18 @@ body {
 .orb-primary {
   top: -12%;
   left: 12%;
-  width: 580px;
-  height: 580px;
-  background: radial-gradient(circle, rgba(0, 240, 255, 0.5) 0%, rgba(6, 182, 212, 0.22) 55%, transparent 80%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(157, 78, 221, 0.55) 0%, rgba(77, 25, 121, 0.25) 55%, transparent 80%);
   animation-duration: 24s;
 }
 
 .orb-secondary {
   top: 35%;
   right: -8%;
-  width: 680px;
-  height: 680px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.45) 0%, rgba(99, 102, 241, 0.25) 55%, transparent 80%);
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(199, 36, 177, 0.45) 0%, rgba(157, 78, 221, 0.25) 55%, transparent 80%);
   animation-duration: 30s;
   animation-delay: -7s;
 }
@@ -200,9 +238,9 @@ body {
 .orb-tertiary {
   bottom: -15%;
   left: 22%;
-  width: 620px;
-  height: 620px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, rgba(56, 189, 248, 0.2) 60%, transparent 80%);
+  width: 650px;
+  height: 650px;
+  background: radial-gradient(circle, rgba(123, 44, 191, 0.4) 0%, rgba(199, 36, 177, 0.2) 60%, transparent 80%);
   animation-duration: 26s;
   animation-delay: -14s;
 }
@@ -210,9 +248,9 @@ body {
 .orb-accent {
   top: 60%;
   left: -10%;
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, rgba(0, 240, 255, 0.16) 50%, transparent 75%);
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(157, 78, 221, 0.35) 0%, rgba(199, 36, 177, 0.18) 50%, transparent 75%);
   animation-duration: 28s;
   animation-delay: -18s;
 }
@@ -232,12 +270,12 @@ body {
   }
 }
 
-/* Cyber Matrix Vector Grid */
+/* Cyber Matrix Vector Grid with Indigo Glow */
 .forensic-grid-mesh {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(to right, rgba(0, 240, 255, 0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
-  background-size: 52px 52px;
+  background-image: linear-gradient(to right, rgba(157, 78, 221, 0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(157, 78, 221, 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
   mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 40%, transparent 95%);
   -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 40%, transparent 95%);
 }
@@ -246,12 +284,12 @@ body {
 .forensic-vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 30%, transparent 50%, rgba(5, 8, 17, 0.75) 100%);
+  background: radial-gradient(ellipse at 50% 30%, transparent 50%, rgba(13, 7, 20, 0.85) 100%);
   pointer-events: none;
 }
 
 [data-theme='light'] .forensic-vignette {
-  background: radial-gradient(ellipse at 50% 30%, transparent 60%, rgba(248, 250, 252, 0.8) 100%);
+  background: radial-gradient(ellipse at 50% 30%, transparent 60%, rgba(245, 241, 250, 0.85) 100%);
 }
 
 /* Canvas Particles */
@@ -261,15 +299,7 @@ body {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  opacity: 0.85;
-}
-
-.glass-panel-glow {
-  background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border-active);
-  box-shadow: 0 0 24px rgba(0, 240, 255, 0.12);
-  border-radius: 12px;
+  opacity: 0.9;
 }
 
 /* Forensic Scanning Line Animation */
@@ -284,8 +314,8 @@ body {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, transparent, #00f0ff, #38bdf8, transparent);
-  box-shadow: 0 0 12px #00f0ff, 0 0 24px rgba(0, 240, 255, 0.6);
+  background: linear-gradient(90deg, transparent, #C724B1, #9D4EDD, transparent);
+  box-shadow: 0 0 14px #C724B1, 0 0 28px rgba(157, 78, 221, 0.7);
   animation: scanVertical 2.2s infinite ease-in-out;
   pointer-events: none;
   z-index: 20;
@@ -293,8 +323,8 @@ body {
 
 /* Pulse animation */
 @keyframes cyberPulse {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.05); }
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
 }
 
 .pulse-node {
@@ -312,32 +342,7 @@ body {
   transform-origin: center;
 }
 
-/* Forensic Reticles / Corner brackets */
-.forensic-corner {
-  position: relative;
-}
-.forensic-corner::before, .forensic-corner::after {
-  content: '';
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-color: var(--cyan-primary);
-  pointer-events: none;
-}
-.forensic-corner::before {
-  top: -1px;
-  left: -1px;
-  border-top: 2px solid var(--cyan-primary);
-  border-left: 2px solid var(--cyan-primary);
-}
-.forensic-corner::after {
-  bottom: -1px;
-  right: -1px;
-  border-bottom: 2px solid var(--cyan-primary);
-  border-right: 2px solid var(--cyan-primary);
-}
-
-/* Buttons */
+/* Clay Pill Buttons */
 .btn-cyber-primary {
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
@@ -345,56 +350,68 @@ body {
   font-size: 13px;
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  padding: 10px 20px;
-  border-radius: 6px;
-  border: none;
+  padding: 10px 22px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 14px rgba(0, 210, 255, 0.3);
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--btn-primary-shadow);
 }
 
 .btn-cyber-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 210, 255, 0.5);
-  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(199, 36, 177, 0.55), inset 2px 2px 5px rgba(255, 255, 255, 0.45), inset -3px -3px 6px rgba(0, 0, 0, 0.5);
+  filter: brightness(1.12);
+}
+
+.btn-cyber-primary:active {
+  transform: translateY(1px);
+  box-shadow: 0 4px 12px rgba(157, 78, 221, 0.35), inset 3px 3px 6px rgba(0, 0, 0, 0.4);
 }
 
 .btn-cyber-secondary {
   background: var(--btn-secondary-bg);
   border: 1px solid var(--border-subtle);
-  color: var(--blue-soft);
+  color: var(--text-main);
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.5px;
-  padding: 9px 18px;
-  border-radius: 6px;
+  padding: 9px 20px;
+  border-radius: 9999px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s ease;
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--btn-secondary-shadow);
 }
 
 .btn-cyber-secondary:hover {
   background: var(--btn-secondary-hover);
-  border-color: var(--cyan-primary);
-  color: var(--text-main);
-  box-shadow: var(--border-glow);
+  border-color: var(--magenta-vivid);
+  color: #FFFFFF;
+  box-shadow: 0 10px 24px rgba(157, 78, 221, 0.35), inset 2px 2px 5px rgba(255, 255, 255, 0.15), inset -3px -3px 6px rgba(0, 0, 0, 0.65);
+  transform: translateY(-2px);
 }
 
-/* Badge styles */
+.btn-cyber-secondary:active {
+  transform: translateY(1px);
+}
+
+/* Tactile Clay Risk Badges */
 .badge-risk-high {
   background: var(--risk-high-bg);
   border: 1px solid var(--risk-high-border);
   color: var(--risk-high-text);
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  box-shadow: 0 4px 10px rgba(255, 75, 114, 0.2), inset 1px 1px 3px rgba(255, 255, 255, 0.25), inset -1px -1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .badge-risk-medium {
@@ -403,9 +420,10 @@ body {
   color: var(--risk-medium-text);
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  box-shadow: 0 4px 10px rgba(245, 158, 11, 0.2), inset 1px 1px 3px rgba(255, 255, 255, 0.25), inset -1px -1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .badge-risk-low {
@@ -414,9 +432,10 @@ body {
   color: var(--risk-low-text);
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2), inset 1px 1px 3px rgba(255, 255, 255, 0.25), inset -1px -1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .badge-risk-uncertain {
@@ -425,9 +444,10 @@ body {
   color: var(--risk-uncertain-text);
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  box-shadow: 0 4px 10px rgba(148, 163, 184, 0.15), inset 1px 1px 3px rgba(255, 255, 255, 0.2), inset -1px -1px 3px rgba(0, 0, 0, 0.35);
 }
 
 /* Monospace stats */
@@ -473,7 +493,7 @@ body {
 .text-forensics-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  gap: 20px;
+  gap: 24px;
   align-items: start;
 }
 
@@ -503,27 +523,27 @@ body {
   }
 }
 
-/* Radar pulse animation for online telemetry */
+/* Radar pulse animation */
 @keyframes radar-pulse {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    box-shadow: 0 0 0 0 rgba(199, 36, 177, 0.7);
   }
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 7px rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 7px rgba(199, 36, 177, 0);
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 0 rgba(199, 36, 177, 0);
   }
 }
 
 .radar-pulse-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background-color: var(--risk-low);
+  background-color: var(--magenta-vivid);
   animation: radar-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
   display: inline-block;
   flex-shrink: 0;

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Header } from './components/Header';
-import { Sidebar } from './components/Sidebar';
+import { TopNavigation } from './components/TopNavigation';
 import { Footer } from './components/Footer';
 import { CommandPalette } from './components/CommandPalette';
 import { OverviewPage } from './pages/OverviewPage';
@@ -32,8 +31,6 @@ function AppLayout() {
   const navigate = useNavigate();
   const { activeCaseId, setActiveCaseId } = useInvestigation();
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   // Derive current tab from pathname (e.g. /image/123 -> image)
   const pathParts = location.pathname.split('/');
@@ -56,13 +53,10 @@ function AppLayout() {
     const staticTabs = ['settings', 'about', 'models', 'new-investigation'];
     if (staticTabs.includes(tab)) {
       navigate(`/${tab}`);
+    } else if (caseId && caseId !== 'undefined' && caseId !== 'null') {
+      navigate(`/${tab}/${caseId}`);
     } else {
-      const targetCaseId = caseId || activeCaseId;
-      if (targetCaseId && targetCaseId !== 'undefined' && targetCaseId !== 'null') {
-        navigate(`/${tab}/${targetCaseId}`);
-      } else {
-        navigate(`/${tab}`);
-      }
+      navigate(`/${tab}`);
     }
   };
 
@@ -77,76 +71,65 @@ function AppLayout() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', backgroundColor: 'var(--bg-deep)', position: 'relative' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-deep)', position: 'relative' }}>
       <ForensicBackground />
-      <Sidebar 
+      <TopNavigation 
         currentTab={currentTab} 
-        onTabChange={handleNavigate}
-        isCollapsed={isSidebarCollapsed}
-        setIsCollapsed={setIsSidebarCollapsed}
-        mobileMenuOpen={mobileMenuOpen}
-        setMobileMenuOpen={setMobileMenuOpen}
+        onNavigate={handleNavigate}
+        activeCaseId={activeCaseId}
+        onSelectCase={handleSelectCase}
+        onOpenSearch={() => setIsSearchOpen(true)}
       />
       
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Header
-          onOpenSearch={() => setIsSearchOpen(true)}
-          activeCaseId={activeCaseId}
-          setMobileMenuOpen={setMobileMenuOpen}
-          onSelectCase={handleSelectCase}
-          onNavigate={handleNavigate}
-        />
+      <main style={{ flex: 1, width: '100%', maxWidth: '1440px', margin: '0 auto', padding: '24px clamp(16px, 2.5vw, 32px)', boxSizing: 'border-box' }}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/overview" replace />} />
+          
+          <Route path="/new-investigation" element={<NewInvestigationPage onNavigate={handleNavigate} />} />
 
-        <main style={{ flex: 1 }}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/overview" replace />} />
-            
-            <Route path="/new-investigation" element={<NewInvestigationPage onNavigate={handleNavigate} />} />
+          <Route path="/overview" element={<OverviewPage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} />} />
+          <Route path="/overview/:caseId" element={<OverviewPage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} />} />
+          
+          <Route path="/image" element={<ImageForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          <Route path="/image/:caseId" element={<ImageForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          
+          <Route path="/video" element={<VideoForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          <Route path="/video/:caseId" element={<VideoForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          
+          <Route path="/audio" element={<AudioForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          <Route path="/audio/:caseId" element={<AudioForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          
+          <Route path="/text" element={<TextStylometryPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          <Route path="/text/:caseId" element={<TextStylometryPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
+          
+          <Route path="/workspace" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
+          <Route path="/workspace/:caseId" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
+          <Route path="/cases" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
+          <Route path="/cases/:caseId" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
+          
+          <Route path="/ai-hub" element={<CentralizedAiHubPage key={activeCaseId} onNavigate={handleNavigate} />} />
+          <Route path="/ai-hub/:caseId" element={<CentralizedAiHubPage key={activeCaseId} onNavigate={handleNavigate} />} />
+          
+          <Route path="/models" element={<ModelInsightsPage />} />
+          
+          <Route path="/reports" element={<ForensicReportsPage selectedCaseId={activeCaseId} onNavigate={handleNavigate} />} />
+          <Route path="/reports/:caseId" element={<ForensicReportsPage selectedCaseId={activeCaseId} onNavigate={handleNavigate} />} />
+          
+          <Route path="/about" element={<ArchitectureAboutPage key={activeCaseId} onNavigate={handleNavigate} />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          
+          <Route path="*" element={<Navigate to="/overview" replace />} />
+        </Routes>
+      </main>
 
-            <Route path="/overview" element={<OverviewPage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} />} />
-            <Route path="/overview/:caseId" element={<OverviewPage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} />} />
-            
-            <Route path="/image" element={<ImageForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            <Route path="/image/:caseId" element={<ImageForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            
-            <Route path="/video" element={<VideoForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            <Route path="/video/:caseId" element={<VideoForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            
-            <Route path="/audio" element={<AudioForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            <Route path="/audio/:caseId" element={<AudioForensicsPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            
-            <Route path="/text" element={<TextStylometryPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            <Route path="/text/:caseId" element={<TextStylometryPage key={activeCaseId} onGenerateReport={handleGenerateReport} onNavigate={handleNavigate} initialCaseId={activeCaseId} />} />
-            
-            <Route path="/workspace" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
-            <Route path="/workspace/:caseId" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
-            <Route path="/cases" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
-            <Route path="/cases/:caseId" element={<InvestigationWorkspacePage key={activeCaseId} onNavigate={handleNavigate} onSelectCase={handleSelectCase} onGenerateReport={handleGenerateReport} />} />
-            
-            <Route path="/ai-hub" element={<CentralizedAiHubPage key={activeCaseId} onNavigate={handleNavigate} />} />
-            <Route path="/ai-hub/:caseId" element={<CentralizedAiHubPage key={activeCaseId} onNavigate={handleNavigate} />} />
-            
-            <Route path="/models" element={<ModelInsightsPage />} />
-            
-            <Route path="/reports" element={<ForensicReportsPage selectedCaseId={activeCaseId} onNavigate={handleNavigate} />} />
-            <Route path="/reports/:caseId" element={<ForensicReportsPage selectedCaseId={activeCaseId} onNavigate={handleNavigate} />} />
-            
-            <Route path="/about" element={<ArchitectureAboutPage key={activeCaseId} onNavigate={handleNavigate} />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            
-            <Route path="*" element={<Navigate to="/overview" replace />} />
-          </Routes>
-        </main>
+      <CommandPalette
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        onSelectCase={handleSelectCase}
+        onNavigate={handleNavigate}
+      />
 
-        <CommandPalette
-          isOpen={isSearchOpen}
-          onClose={() => setIsSearchOpen(false)}
-          onSelectCase={handleSelectCase}
-          onNavigate={handleNavigate}
-        />
-
-        <Footer onNavigate={handleNavigate} />
-      </div>
+      <Footer onNavigate={handleNavigate} />
     </div>
   );
 }

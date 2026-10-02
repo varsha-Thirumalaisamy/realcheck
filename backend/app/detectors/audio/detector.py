@@ -29,7 +29,8 @@ class AudioDetector(BaseDetector):
         )
 
     def analyze(self, file_path_or_content: Any, metadata: Optional[Dict[str, Any]] = None) -> InvestigationResult:
-        case_id = f"RC-2026-{int(time.time() % 10000):04d}"
+        import uuid
+        case_id = (metadata or {}).get("request_id") or f"RC-2026-{int(time.time() % 10000):04d}-{uuid.uuid4().hex[:4].upper()}"
         file_name = (metadata or {}).get("file_name", "uploaded_audio.wav")
         file_size = (metadata or {}).get("file_size", "0.0 MB")
         content_hash = hashlib.sha256(file_name.encode()).hexdigest()
@@ -38,8 +39,8 @@ class AudioDetector(BaseDetector):
         evidence = []
         segments = []
         
-        authenticity_score = 100
-        ai_prob = 10.0
+        authenticity_score = 85
+        ai_prob = 15.0
         manip_risk = 10.0
         forensic_anomaly = 10.0
         meta_risk = 10.0
@@ -47,7 +48,7 @@ class AudioDetector(BaseDetector):
         duration = "Unknown"
         mime_type = "audio/wav"
         
-        why_explanation = "The audio was analyzed using real local librosa acoustic feature extraction."
+        why_explanation = "The audio was analyzed using local acoustic feature extraction."
 
         if file_path_or_content and os.path.exists(file_path_or_content):
             try:
@@ -56,8 +57,7 @@ class AudioDetector(BaseDetector):
                 dur_sec = librosa.get_duration(y=y, sr=sr)
                 duration = f"{dur_sec:.1f}s"
                 
-                # Spectral Rolloff: measures the frequency below which a specified percentage of the total spectral energy lies
-                # AI voices often have unnatural roll-offs due to lack of breath/fricative noise at high frequencies
+                # Spectral Rolloff
                 rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
                 mean_rolloff = float(np.mean(rolloff))
                 var_rolloff = float(np.var(rolloff))
@@ -67,8 +67,8 @@ class AudioDetector(BaseDetector):
                 mean_zcr = float(np.mean(zcr))
                 
                 if var_rolloff < 100000:
-                    ai_prob = 82.0
-                    authenticity_score -= 35
+                    ai_prob = 85.0
+                    authenticity_score = 15
                     why_explanation += f" The spectral roll-off variance ({var_rolloff:.1f}) is exceptionally low, typical of neural vocoder synthesis lacking natural vocal tract noise."
                     
                     signals.append(
@@ -95,15 +95,15 @@ class AudioDetector(BaseDetector):
                         )
                     )
                 elif mean_zcr < 0.02:
-                    manip_risk = 70.0
-                    authenticity_score -= 25
+                    manip_risk = 75.0
+                    authenticity_score = 25
                     why_explanation += " Unusually low zero-crossing rate suggests excessive artificial noise gating or synthetic generation."
                     
                     signals.append(
                         ForensicSignal(
                             name="Unnatural Zero-Crossing Rate",
                             category="frequency",
-                            score=70.0,
+                            score=75.0,
                             weight=0.25,
                             strength="Moderate",
                             status="Suspicious Pattern",
@@ -113,6 +113,7 @@ class AudioDetector(BaseDetector):
                         )
                     )
                 else:
+                    authenticity_score = 85
                     signals.append(
                         ForensicSignal(
                             name="Natural Acoustic Profile",
@@ -128,20 +129,21 @@ class AudioDetector(BaseDetector):
                     )
                     
             except Exception as e:
-                authenticity_score = 0
+                authenticity_score = 50
                 why_explanation = f"Error during librosa processing: {str(e)}"
         else:
-            authenticity_score = 0
+            authenticity_score = 50
             why_explanation = "No file content provided to the detector."
 
-        risk_level = "Low Risk"
-        assessment = "Likely Authentic"
-        if authenticity_score <= 30:
+        if authenticity_score <= 35:
             risk_level = "High Risk"
-            assessment = "Likely Synthetic Voice"
-        elif authenticity_score <= 60:
+            assessment = "Likely AI-Generated"
+        elif authenticity_score <= 65:
             risk_level = "Medium Risk"
-            assessment = "Uncertain / Mixed Evidence"
+            assessment = "Inconclusive"
+        else:
+            risk_level = "Low Risk"
+            assessment = "Likely Real"
             
         return InvestigationResult(
             case_id=case_id,

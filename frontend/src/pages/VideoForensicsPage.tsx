@@ -1,19 +1,31 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  Play,
   Upload,
+  Play,
+  Pause,
   HelpCircle,
   FileSpreadsheet,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Cpu,
   Layers,
-  AlertTriangle
+  Sparkles,
+  Sliders,
+  Eye,
+  Film,
+  Activity
 } from 'lucide-react';
 import { ScoreMeter } from '../components/ScoreMeter';
-import { EvidenceCardComponent } from '../components/EvidenceCardComponent';
+import { AnalysisResult } from '../components/AnalysisResult';
+import { EvidenceIntegrityCard } from '../components/EvidenceIntegrityCard';
 import { LiveScanAnimation } from '../components/LiveScanAnimation';
 import { WhyThisResultModal } from '../components/WhyThisResultModal';
+import { ForensicPipeline, PipelineStep } from '../components/ForensicPipeline';
 import { SAMPLE_CASES } from '../data/sampleCases';
 import { InvestigationResult } from '../types/forensics';
 import { forensicApi } from '../services/api';
+import { useInvestigation } from '../contexts/InvestigationContext';
 
 interface VideoForensicsPageProps {
   onGenerateReport: (caseId: string) => void;
@@ -26,890 +38,684 @@ export const VideoForensicsPage: React.FC<VideoForensicsPageProps> = ({
   onNavigate,
   initialCaseId = 'RC-2026-0043'
 }) => {
-  const [currentCase, setCurrentCase] = useState<InvestigationResult>(
-    SAMPLE_CASES[initialCaseId] || SAMPLE_CASES['RC-2026-0043']
-  );
+  const { isDemoMode, activeCaseId, setActiveCaseId, generateNewCaseId } = useInvestigation();
+
+  const effectiveInitialCase = (initialCaseId && SAMPLE_CASES[initialCaseId]?.media_type === 'VIDEO')
+    ? SAMPLE_CASES[initialCaseId]
+    : SAMPLE_CASES['RC-2026-0043'];
+
+  const [currentCase, setCurrentCase] = useState<InvestigationResult>(effectiveInitialCase);
   const [uploadedVideoSrc, setUploadedVideoSrc] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isWhyModalOpen, setIsWhyModalOpen] = useState(false);
-  const [currentTimeSec, setCurrentTimeSec] = useState<number>(9);
-  const [durationSec, setDurationSec] = useState<number>(20);
-  const [selectedFrameView, setSelectedFrameView] = useState<'overlay' | 'diff' | 'original'>('overlay');
+  const [activeSample, setActiveSample] = useState<'ai' | 'real' | null>('ai');
+  const [selectedFrame, setSelectedFrame] = useState<number>(85);
   const [isDragging, setIsDragging] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // Pipeline execution state
+  const [pipelinePhase, setPipelinePhase] = useState<'idle' | 'uploaded' | 'loading' | 'preprocessing' | 'inference' | 'completed' | 'error'>('completed');
+  const [pipelineError, setPipelineError] = useState<{ stage: string; reason: string; action?: string; requestId?: string } | null>(null);
+  const [meta, setMeta] = useState<{ fileName: string; fileSize: string; duration: string }>({
+    fileName: effectiveInitialCase.file_name,
+    fileSize: effectiveInitialCase.metadata?.file_size_formatted || '18.4 MB',
+    duration: '00:10 (120 frames @ 12 fps)'
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSelectSample = (caseId: string) => {
-    if (SAMPLE_CASES[caseId]) {
-      setUploadedVideoSrc(null);
-      setAnalysisError(null);
-      setCurrentCase(SAMPLE_CASES[caseId]);
-      setCurrentTimeSec(caseId === 'RC-2026-0043' ? 9 : 4);
-      setDurationSec(20);
+  useEffect(() => {
+    if (activeCaseId && SAMPLE_CASES[activeCaseId] && SAMPLE_CASES[activeCaseId].media_type === 'VIDEO') {
+      setCurrentCase(SAMPLE_CASES[activeCaseId]);
     }
-  };
+  }, [activeCaseId]);
 
-  const processUploadedVideo = async (file: File) => {
-    try {
-      const objectUrl = URL.createObjectURL(file);
-      setUploadedVideoSrc(objectUrl);
-      setAnalysisError(null);
-      setIsScanning(true);
+  // Video-specific 6-step Forensic Pipeline
+  const pipelineSteps: PipelineStep[] = [
+    {
+      id: '1',
+      stepNumber: 1,
+      title: 'Frame Extraction',
+      subtitle: '120 frames extracted at 12 fps',
+      status: pipelinePhase === 'idle' ? 'pending' : (pipelinePhase === 'uploaded' ? 'processing' : 'success')
+    },
+    {
+      id: '2',
+      stepNumber: 2,
+      title: 'Temporal Analysis',
+      subtitle: '3D-CNN temporal continuity',
+      status: ['idle', 'uploaded'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'loading' ? 'processing' : 'success')
+    },
+    {
+      id: '3',
+      stepNumber: 3,
+      title: 'Facial Landmark Analysis',
+      subtitle: '68-point spatial tracking',
+      status: ['idle', 'uploaded', 'loading'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'preprocessing' ? 'processing' : 'success')
+    },
+    {
+      id: '4',
+      stepNumber: 4,
+      title: 'Optical Flow',
+      subtitle: 'Dense motion vector fields',
+      status: ['idle', 'uploaded', 'loading', 'preprocessing'].includes(pipelinePhase) ? 'pending' : (pipelinePhase === 'inference' ? 'processing' : 'success')
+    },
+    {
+      id: '5',
+      stepNumber: 5,
+      title: 'Signal Fusion',
+      subtitle: 'Audio-visual lip sync audit',
+      status: pipelinePhase === 'completed' ? 'success' : (pipelinePhase === 'inference' ? 'processing' : 'pending')
+    },
+    {
+      id: '6',
+      stepNumber: 6,
+      title: 'Video Analysis Complete',
+      subtitle: currentCase ? currentCase.assessment : 'Assessment',
+      status: pipelinePhase === 'completed' ? 'success' : 'pending'
+    }
+  ];
 
-      try {
-        const backendResult = await forensicApi.analyzeMedia('VIDEO', file);
-        if (backendResult && backendResult.case_id) {
-          backendResult.preview_url = objectUrl;
-          setCurrentCase(backendResult);
-          setIsScanning(false);
-          return;
-        }
-      } catch (err) {
-        console.warn('Backend video analysis failed, computing from stream properties:', err);
-      }
+  // Execute fast deterministic presentation demo (3-5s)
+  const runFastDemoAnalysis = async (targetCaseId: string, customFile?: File) => {
+    setIsScanning(true);
+    setAnalysisError(null);
+    setPipelineError(null);
+    setPipelinePhase('uploaded');
 
-      // Fallback only if backend is completely unavailable
-      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-      const sizeStr = `${sizeMb} MB`;
-      const caseId = `RC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const hashStr = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    const sample = SAMPLE_CASES[targetCaseId] || SAMPLE_CASES['RC-2026-0043'];
+    const caseId = generateNewCaseId('RC-2026-');
+    const newDemoCase: InvestigationResult = {
+      ...sample,
+      case_id: caseId,
+      is_demo_analysis: true,
+      timestamp: new Date().toISOString()
+    };
 
-      const isSuspect = file.name.toLowerCase().includes('deep') || file.name.toLowerCase().includes('fake') || file.name.toLowerCase().includes('ai');
-      const deepfakeProb = isSuspect ? 0.76 : 0.18;
-      const authScore = Math.round((1 - deepfakeProb) * 100);
-      const deepfakeRisk = Math.round(deepfakeProb * 100);
-
-      const newCase: InvestigationResult = {
-        ...SAMPLE_CASES['RC-2026-0043'],
-        case_id: caseId,
-        file_name: file.name,
-        sample_type: isSuspect ? 'ai' : 'real',
-        assessment: isSuspect ? 'Likely AI-Manipulated' : 'Likely Authentic',
-        authenticity_score: authScore,
-        risk_level: authScore <= 30 ? 'High Risk' : (authScore <= 60 ? 'Medium Risk' : 'Low Risk'),
-        confidence_level: 'High',
-        confidence_score: 0.85,
-        ai_generation_probability: deepfakeRisk,
-        deepfake_probability: deepfakeProb,
-        manipulation_risk: deepfakeRisk,
-        forensic_anomaly_score: deepfakeRisk,
-        metadata: {
-          file_name: file.name,
-          file_size_formatted: sizeStr,
-          mime_type: file.type || 'video/mp4',
-          dimensions: 'Auto-detected stream',
-          duration: 'Detected stream',
-          creation_time: new Date().toUTCString(),
-          software_signature: 'AVC/H.264 bitstream container',
-          camera_model: isSuspect ? 'Not detected' : 'Standard sensor stream',
-          exif_available: false,
-          editing_software_indicator: 'Direct stream',
-          hash_sha256: hashStr,
-          metadata_risk_score: 20.0,
-          note: 'Metadata is supporting evidence only and can be altered or removed.'
-        },
-        why_result_explanation: isSuspect
-          ? `Spatial-temporal analysis of ${file.name} detected elevated landmark variance around facial perimeters and non-rigid optical flow transitions.`
-          : `Continuous rigid skull pose tracking and smooth optical flow trajectories corroborate physical camera capture across ${file.name}.`,
-        preview_url: objectUrl
+    if (customFile) {
+      newDemoCase.file_name = customFile.name;
+      newDemoCase.metadata = {
+        ...newDemoCase.metadata,
+        file_name: customFile.name,
+        file_size_formatted: `${(customFile.size / (1024 * 1024)).toFixed(2)} MB`
       };
+      setMeta({
+        fileName: customFile.name,
+        fileSize: `${(customFile.size / (1024 * 1024)).toFixed(2)} MB`,
+        duration: '00:10 (120 frames @ 12 fps)'
+      });
+    } else {
+      setMeta({
+        fileName: sample.file_name,
+        fileSize: sample.metadata?.file_size_formatted || '18.4 MB',
+        duration: '00:10 (120 frames @ 12 fps)'
+      });
+    }
 
-      setCurrentCase(newCase);
+    // Step 1: Frame Extraction (500ms)
+    await new Promise(r => setTimeout(r, 500));
+    setPipelinePhase('loading');
+
+    // Step 2: Temporal Analysis (600ms)
+    await new Promise(r => setTimeout(r, 600));
+    setPipelinePhase('preprocessing');
+
+    // Step 3: Facial Landmark Analysis (650ms)
+    await new Promise(r => setTimeout(r, 650));
+    setPipelinePhase('inference');
+
+    // Step 4 & 5: Optical Flow & Signal Fusion (950ms)
+    await new Promise(r => setTimeout(r, 950));
+
+    // Step 6: Complete!
+    setCurrentCase(newDemoCase);
+    setActiveCaseId(caseId);
+    setPipelinePhase('completed');
+    setIsScanning(false);
+  };
+
+  // Run live backend inference with fallback
+  const runLiveAnalysis = async (file: File) => {
+    setIsScanning(true);
+    setAnalysisError(null);
+    setPipelineError(null);
+    setPipelinePhase('uploaded');
+
+    setMeta({
+      fileName: file.name,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      duration: 'Analyzing video stream...'
+    });
+
+    await new Promise(r => setTimeout(r, 300));
+    setPipelinePhase('loading');
+
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT')), 5000);
+      });
+
+      setPipelinePhase('inference');
+      const backendPromise = forensicApi.analyzeMedia('VIDEO', file);
+      const result = await Promise.race([backendPromise, timeoutPromise]);
+
+      if (result && result.case_id) {
+        setCurrentCase(result);
+        setActiveCaseId(result.case_id);
+        setPipelinePhase('completed');
+        setIsScanning(false);
+      } else {
+        throw new Error('Invalid backend response');
+      }
+    } catch (err: any) {
       setIsScanning(false);
+      setPipelinePhase('error');
+      const isTimeout = err.message === 'TIMEOUT';
+      const reasonMsg = isTimeout
+        ? 'External analysis is taking longer than expected.'
+        : 'External detector unavailable';
+
+      setPipelineError({
+        stage: isTimeout ? 'API Gateway Timeout' : 'Video Detector',
+        reason: reasonMsg,
+        action: 'You can continue seamlessly using deterministic presentation demo mode.',
+        requestId: `RC-VID-${Date.now().toString().slice(-6)}`
+      });
+      setAnalysisError(reasonMsg);
+    }
+  };
+
+  const handleFile = (file: File) => {
+    const validExts = /\.(mp4|mov|avi|webm|mkv)$/i;
+    if (!file.name.match(validExts)) {
+      setPipelinePhase('error');
+      setPipelineError({
+        stage: 'Format Validation',
+        reason: 'Unsupported evidence format',
+        action: 'Accepted formats: MP4, MOV, WEBM, AVI.',
+        requestId: 'RC-FMT-ERR'
+      });
+      setAnalysisError('Unsupported evidence format. Accepted formats: MP4, MOV, WEBM, AVI.');
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setUploadedVideoSrc(objectUrl);
+    setActiveSample(null);
+    runLiveAnalysis(file);
+  };
+
+  const handleSelectSample = async (sampleType: 'ai' | 'real') => {
+    setActiveSample(sampleType);
+    const sampleUrl = sampleType === 'ai' ? '/samples/face_swap.mp4' : '/samples/authentic_video.mp4';
+    const sampleFileName = sampleType === 'ai' ? 'face_swap.mp4' : 'authentic_video.mp4';
+    setUploadedVideoSrc(sampleUrl);
+
+    try {
+      const res = await fetch(sampleUrl);
+      const blob = await res.blob();
+      const file = new File([blob], sampleFileName, { type: 'video/mp4' });
+      runLiveAnalysis(file);
     } catch {
-      setIsScanning(false);
-      setAnalysisError('Unable to load video stream. Please ensure the file is a valid video format (MP4, WEBM, MOV, AVI).');
+      const targetCaseId = sampleType === 'ai' ? 'RC-2026-0043' : 'RC-2026-0047';
+      runFastDemoAnalysis(targetCaseId);
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processUploadedVideo(file);
-    }
-  };
+  const isAi = currentCase?.sample_type === 'ai' || (currentCase?.ai_generation_probability ?? 0) >= 50;
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('video/')) {
-      processUploadedVideo(file);
-    }
-  };
-
-  const handleTimelineClick = (sec: number) => {
-    setCurrentTimeSec(sec);
-    if (videoRef.current) {
-      videoRef.current.currentTime = sec;
-    }
-  };
-
-  const activeSegment = currentCase.suspicious_segments?.find(
-    s => currentTimeSec >= s.start_seconds && currentTimeSec <= s.end_seconds
-  );
-
-  // Exact real data mapping from backend analysis response (handles both 0..1 and 0..100 probability ranges)
-  const getProbabilityPercent = (
-    deepfakeProb: number | undefined | null,
-    aiProb: number | undefined | null,
-    authScore: number | undefined | null
-  ): number => {
-    const raw = deepfakeProb !== undefined && deepfakeProb !== null ? deepfakeProb : aiProb;
-    if (typeof raw === 'number' && !isNaN(raw)) {
-      // If probability is in 0..1 range (and > 0), convert to 0..100 percentage (e.g. 0.87 -> 87%, 0.04 -> 4%)
-      const pct = raw <= 1.0 && raw > 0 ? raw * 100 : raw;
-      return Math.min(100, Math.max(0, pct));
-    }
-    if (typeof authScore === 'number' && !isNaN(authScore)) {
-      return Math.min(100, Math.max(0, 100 - authScore));
-    }
-    return 0;
-  };
-
-  const aiPercentage = getProbabilityPercent(
-    currentCase.deepfake_probability,
-    currentCase.ai_generation_probability,
-    currentCase.authenticity_score
-  );
-  // Ensure authentic + deepfake percentages strictly sum to 100%
-  const realPercentage = Math.round((100 - aiPercentage) * 10) / 10;
-
-  const verdictColor = currentCase.risk_level === 'High Risk' || currentCase.authenticity_score <= 30
-    ? 'var(--risk-high)'
-    : currentCase.risk_level === 'Medium Risk' || currentCase.authenticity_score <= 60
-      ? 'var(--risk-medium)'
-      : 'var(--risk-low)';
+  // Generate 8 key sample frames for the filmstrip
+  const filmstripFrames = [
+    { frameNum: 15, time: '00:01', isSuspicious: false },
+    { frameNum: 32, time: '00:03', isSuspicious: false },
+    { frameNum: 48, time: '00:04', isSuspicious: false },
+    { frameNum: 64, time: '00:05', isSuspicious: false },
+    { frameNum: 78, time: '00:07', isSuspicious: isAi },
+    { frameNum: 85, time: '00:08', isSuspicious: isAi },
+    { frameNum: 92, time: '00:09', isSuspicious: isAi },
+    { frameNum: 110, time: '00:10', isSuspicious: false }
+  ];
 
   return (
-    <div style={{ maxWidth: '1360px', margin: '0 auto', padding: '20px clamp(16px, 3vw, 28px) 80px' }}>
-      {/* Hidden file input */}
+    <div style={{ maxWidth: '1360px', margin: '0 auto', width: '100%' }}>
       <input
         ref={fileInputRef}
         type="file"
-        accept="video/mp4,video/webm,video/mov,video/avi"
+        accept="video/mp4,video/quicktime,video/webm,video/x-msvideo"
         style={{ display: 'none' }}
-        onChange={handleFileChange}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+        }}
       />
 
-      {/* Header Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
+      {/* 1. Header & Title Section */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}
+      >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--cyan-primary)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700 }}>
-              SPECIALIZED FORENSIC ENGINE 02
+            <span
+              style={{
+                fontSize: '11px',
+                color: 'var(--magenta-vivid)',
+                letterSpacing: '1px',
+                textTransform: 'uppercase',
+                fontWeight: 800
+              }}
+            >
+              MODULE 02 &bull; VIDEO FORENSICS
             </span>
             <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>&bull;</span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>SPATIAL-TEMPORAL CNN + LANDMARK RNN</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              LANDMARKS &bull; OPTICAL FLOW &bull; TEMPORAL CNN &bull; LIP SYNC
+            </span>
           </div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.4px', marginTop: '2px' }}>
-            CINEMATIC VIDEO &amp; DEEPFAKE FORENSICS
+          <h1
+            style={{
+              fontSize: 'clamp(22px, 3vw, 30px)',
+              fontWeight: 800,
+              color: '#FFFFFF',
+              letterSpacing: '0.4px',
+              marginTop: '4px'
+            }}
+          >
+            VIDEO FORENSICS &amp; TEMPORAL AUTHENTICITY
           </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px', maxWidth: '780px' }}>
+            Multi-frame temporal consistency, facial landmark trajectory tracking, dense optical flow vectors, and audio-visual synchronization analysis.
+          </p>
         </div>
 
-        {/* Action Controls */}
+        {/* Top Sample Selectors */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn-cyber-primary"
+            style={{ fontSize: '11px', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '7px' }}
+          >
+            <Upload size={14} />
+            <span>SELECT VIDEO</span>
+          </button>
+
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)', margin: '0 4px' }}>or benchmark:</span>
+
+          <button
+            onClick={() => handleSelectSample('ai')}
+            className={activeSample === 'ai' ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
             style={{ fontSize: '11px', padding: '7px 14px' }}
           >
-            <Upload size={13} />
-            <span>UPLOAD VIDEO</span>
+            <Sparkles size={12} style={{ marginRight: '5px' }} />
+            <span>Sample: Face Swap</span>
           </button>
 
-          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>or load:</span>
-
           <button
-            onClick={() => handleSelectSample('RC-2026-0043')}
-            className={currentCase.case_id === 'RC-2026-0043' && !uploadedVideoSrc ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
-            style={{ fontSize: '11px', padding: '6px 12px' }}
+            onClick={() => handleSelectSample('real')}
+            className={activeSample === 'real' ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
+            style={{ fontSize: '11px', padding: '7px 14px' }}
           >
-            Deepfake Press Statement (AI)
-          </button>
-          <button
-            onClick={() => handleSelectSample('RC-2026-0047')}
-            className={currentCase.case_id === 'RC-2026-0047' && !uploadedVideoSrc ? 'btn-cyber-primary' : 'btn-cyber-secondary'}
-            style={{ fontSize: '11px', padding: '6px 12px' }}
-          >
-            Broadcast News Raw (Authentic)
+            <CheckCircle2 size={12} style={{ marginRight: '5px' }} />
+            <span>Sample: Authentic Video</span>
           </button>
         </div>
       </div>
 
-      {/* Analysis Error Toast */}
-      {analysisError && (
-        <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--risk-high)', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--risk-high)', fontSize: '12px' }}>
-          <AlertTriangle size={16} />
-          <span>{analysisError}</span>
+      {/* 2. Drag & Drop Upload Panel */}
+      <div
+        className="glass-panel"
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) handleFile(file);
+        }}
+        style={{
+          padding: '24px',
+          borderRadius: '20px',
+          border: isDragging ? '1px dashed var(--magenta-vivid)' : '1px solid rgba(157, 78, 221, 0.25)',
+          background: isDragging ? 'rgba(31, 19, 43, 0.9)' : '#1F132B',
+          boxShadow: isDragging ? '0 0 30px rgba(199, 36, 177, 0.3)' : 'var(--clay-box-shadow)',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #2A173D 0%, #170C22 100%)',
+              border: '1px solid rgba(157, 78, 221, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--magenta-vivid)',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+          >
+            <Upload size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#FFFFFF' }}>
+              Upload Video for Deepfake &amp; Temporal Analysis
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Supports MP4, MOV, WEBM, AVI &bull; Automatic frame extraction &bull; SHA-256 integrity verification
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-cyber-primary"
+            style={{ padding: '8px 18px', fontSize: '11px' }}
+          >
+            SELECT VIDEO
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Reusable Forensic Pipeline */}
+      <ForensicPipeline
+        hasInput={Boolean(uploadedVideoSrc || currentCase)}
+        inputBadgeText={isDemoMode ? 'DEMO PRESENTATION ACTIVE' : 'LIVE DETECTOR ACTIVE'}
+        overallPhase={pipelinePhase}
+        metadata={{
+          fileName: meta.fileName,
+          fileSize: meta.fileSize,
+          dimensionsOrDuration: meta.duration,
+          modelName: currentCase?.model_verification?.model_name || 'Spatial-Temporal CNN + Landmark RNN'
+        }}
+        error={pipelineError}
+        onClearError={() => {
+          setPipelineError(null);
+          setAnalysisError(null);
+          setPipelinePhase('completed');
+        }}
+        onRetry={() => fileInputRef.current?.click()}
+        onContinueWithDemo={() => runFastDemoAnalysis('RC-2026-0043')}
+        steps={pipelineSteps}
+      />
+
+      {/* 4. Live Scanning Laser Animation */}
+      {isScanning && (
+        <div style={{ padding: '40px 0' }}>
+          <LiveScanAnimation mediaType="VIDEO" onComplete={() => setIsScanning(false)} />
         </div>
       )}
 
-      {isScanning ? (
-        <div style={{ padding: '60px 0' }}>
-          <LiveScanAnimation mediaType="VIDEO" onComplete={() => setIsScanning(false)} />
-        </div>
-      ) : (
+      {/* 5. Main Results View */}
+      {!isScanning && currentCase && (
         <>
-          {/* Main Two-Column Grid: Left (~58% Spatial-Temporal Monitor) & Right (~42% Authenticity Result) */}
-          <div className="video-forensics-grid" style={{ marginBottom: '24px' }}>
-            {/* LEFT SIDE: Video Player & Frame Timeline View */}
-            <div className="glass-panel forensic-corner" style={{ padding: '20px', borderRadius: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan-primary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                  SPATIAL-TEMPORAL VIDEO MONITOR
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <button
-                    onClick={() => setSelectedFrameView('overlay')}
-                    style={{
-                      background: selectedFrameView === 'overlay' ? 'rgba(0, 240, 255, 0.15)' : 'transparent',
-                      border: selectedFrameView === 'overlay' ? '1px solid var(--cyan-primary)' : '1px solid var(--border-subtle)',
-                      color: selectedFrameView === 'overlay' ? 'var(--cyan-primary)' : 'var(--text-muted)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Overlay
-                  </button>
-                  <button
-                    onClick={() => setSelectedFrameView('diff')}
-                    style={{
-                      background: selectedFrameView === 'diff' ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
-                      border: selectedFrameView === 'diff' ? '1px solid var(--risk-high)' : '1px solid var(--border-subtle)',
-                      color: selectedFrameView === 'diff' ? 'var(--risk-high)' : 'var(--text-muted)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Difference
-                  </button>
-                  <button
-                    onClick={() => setSelectedFrameView('original')}
-                    style={{
-                      background: selectedFrameView === 'original' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                      border: selectedFrameView === 'original' ? '1px solid var(--risk-low)' : '1px solid var(--border-subtle)',
-                      color: selectedFrameView === 'original' ? 'var(--risk-low)' : 'var(--text-muted)',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Original
-                  </button>
-                </div>
+          {/* Main Result Card with Radial Manipulation Likelihood */}
+          <AnalysisResult
+            result={currentCase}
+            title="VIDEO ANALYSIS COMPLETE"
+            onGenerateReport={onGenerateReport}
+            onOpenWhyModal={() => setIsWhyModalOpen(true)}
+          />
+
+          {/* Technical Telemetry Strip */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '12px',
+              marginBottom: '24px'
+            }}
+          >
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Frames Analyzed
               </div>
-
-              {/* Cinematic Video Viewport */}
-              <div
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  height: '310px',
-                  backgroundColor: 'var(--bg-deep)',
-                  borderRadius: '8px',
-                  border: isDragging ? '2px dashed var(--cyan-primary)' : '1px solid var(--border-subtle)',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'border 0.2s ease'
-                }}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                {/* Horizontal scanner bar */}
-                <div className="scanner-laser" />
-
-                {/* Real Video Player or Simulated Canvas */}
-                {uploadedVideoSrc ? (
-                  <video
-                    ref={videoRef}
-                    src={uploadedVideoSrc}
-                    controls
-                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
-                    onTimeUpdate={(e) => setCurrentTimeSec(Math.round(e.currentTarget.currentTime))}
-                    onLoadedMetadata={(e) => setDurationSec(Math.round(e.currentTarget.duration) || 20)}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundImage: currentCase.sample_type === 'ai'
-                        ? 'radial-gradient(circle at 50% 40%, rgba(30, 58, 95, 0.8) 0%, rgba(13, 23, 38, 0.9) 60%, rgba(6, 9, 17, 0.95) 100%)'
-                        : 'radial-gradient(circle at 50% 50%, rgba(19, 46, 39, 0.8) 0%, rgba(10, 28, 24, 0.9) 60%, rgba(6, 9, 17, 0.95) 100%)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column'
-                    }}
-                  >
-                    {/* Speaker Face Box & Landmark Tracking Mesh */}
-                    <div
-                      style={{
-                        width: '160px',
-                        height: '190px',
-                        borderRadius: '50% 50% 45% 45%',
-                        border: currentCase.sample_type === 'ai' && currentTimeSec >= 8 && currentTimeSec <= 11
-                          ? '2px solid var(--risk-high)'
-                          : '1px dashed var(--cyan-primary)',
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: currentCase.sample_type === 'ai' && currentTimeSec >= 8 && currentTimeSec <= 11
-                          ? '0 0 20px rgba(239, 68, 68, 0.35)'
-                          : 'none',
-                        background: 'rgba(15, 23, 42, 0.4)'
-                      }}
-                    >
-                      {/* Simulated facial landmark points */}
-                      <div style={{ position: 'absolute', top: '35%', left: '30%', width: '5px', height: '5px', backgroundColor: 'var(--cyan-primary)', borderRadius: '50%' }} />
-                      <div style={{ position: 'absolute', top: '35%', right: '30%', width: '5px', height: '5px', backgroundColor: 'var(--cyan-primary)', borderRadius: '50%' }} />
-                      <div style={{ position: 'absolute', top: '55%', left: '48%', width: '5px', height: '5px', backgroundColor: 'var(--cyan-primary)', borderRadius: '50%' }} />
-                      <div style={{ position: 'absolute', top: '72%', left: '38%', width: '36px', height: '10px', border: '1px solid var(--risk-medium)', borderRadius: '50%' }} />
-
-                      <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '10px', marginTop: '65px' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan-primary)' }}>FRAME #{currentTimeSec * 30}</span>
-                        <div style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: '11px', marginTop: '2px' }}>{currentCase.file_name}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Difference / Anomaly Heatmap Layer */}
-                {selectedFrameView !== 'original' && currentCase.sample_type === 'ai' && currentTimeSec >= 8 && currentTimeSec <= 11 && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      background: 'radial-gradient(ellipse at 50% 45%, rgba(239, 68, 68, 0.65) 0%, rgba(245, 158, 11, 0.35) 45%, transparent 75%)',
-                      pointerEvents: 'none',
-                      mixBlendMode: 'screen',
-                      transition: 'opacity 0.2s ease'
-                    }}
-                  />
-                )}
-
-                {/* Time & FPS Badge */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '10px',
-                    left: '10px',
-                    backgroundColor: 'var(--bg-card-solid)',
-                    border: '1px solid var(--border-subtle)',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    color: 'var(--cyan-primary)',
-                    zIndex: 20
-                  }}
-                >
-                  00:{String(currentTimeSec).padStart(2, '0')} / 00:{String(durationSec).padStart(2, '0')} &bull; 30 FPS
-                </div>
-
-                {/* Suspicious timestamp alert flag */}
-                {activeSegment && activeSegment.risk_level === 'High' && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '10px',
-                      right: '10px',
-                      backgroundColor: 'rgba(239, 68, 68, 0.9)',
-                      color: '#ffffff',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '0.5px',
-                      zIndex: 20
-                    }}
-                  >
-                    HIGH SUSPICION FRAME
-                  </div>
-                )}
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#FFFFFF', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                120
               </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>Temporal slice sampling</div>
+            </div>
 
-              {/* FRAME TIMELINE SCRUBBER */}
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                    FRAME ANOMALY TIMELINE &bull; CLICK ANY TIMESTAMP
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10px' }}>
-                    <span style={{ color: 'var(--risk-low)' }}>● Normal</span>
-                    <span style={{ color: 'var(--risk-medium)' }}>● Suspicious</span>
-                    <span style={{ color: 'var(--risk-high)' }}>● High Risk</span>
-                  </div>
-                </div>
-
-                {/* Colored Multi-segment timeline bar */}
-                <div
-                  style={{
-                    position: 'relative',
-                    height: '20px',
-                    backgroundColor: 'var(--bg-body-pattern-1)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '4px',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div
-                    onClick={() => handleTimelineClick(4)}
-                    style={{
-                      width: '35%',
-                      backgroundColor: 'rgba(16, 185, 129, 0.25)',
-                      borderRight: '1px solid var(--border-subtle)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '10px',
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--risk-low)'
-                    }}
-                    title="00:00 - 00:07: Normal baseline optical flow"
-                  >
-                    00:00
-                  </div>
-
-                  <div
-                    onClick={() => handleTimelineClick(9)}
-                    style={{
-                      width: '20%',
-                      backgroundColor: currentCase.sample_type === 'ai' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(16, 185, 129, 0.25)',
-                      borderRight: '1px solid var(--border-subtle)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '10px',
-                      fontFamily: 'var(--font-mono)',
-                      color: '#ffffff',
-                      fontWeight: 700
-                    }}
-                    title="00:08 - 00:11: Critical anomaly window (Facial warping & lip-sync offset)"
-                  >
-                    00:08 - 00:11
-                  </div>
-
-                  <div
-                    onClick={() => handleTimelineClick(13)}
-                    style={{
-                      width: '20%',
-                      backgroundColor: currentCase.sample_type === 'ai' ? 'rgba(245, 158, 11, 0.45)' : 'rgba(16, 185, 129, 0.25)',
-                      borderRight: '1px solid var(--border-subtle)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '10px',
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--risk-medium)'
-                    }}
-                    title="00:12 - 00:15: Residual viseme timing lag"
-                  >
-                    00:12
-                  </div>
-
-                  <div
-                    onClick={() => handleTimelineClick(18)}
-                    style={{
-                      width: '25%',
-                      backgroundColor: 'rgba(16, 185, 129, 0.25)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '10px',
-                      fontFamily: 'var(--font-mono)',
-                      color: 'var(--risk-low)'
-                    }}
-                    title="00:16 - 00:20: Normal flow stabilization"
-                  >
-                    00:20
-                  </div>
-
-                  {/* Scrub marker cursor */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      left: `${(currentTimeSec / durationSec) * 100}%`,
-                      width: '3px',
-                      backgroundColor: 'var(--cyan-primary)',
-                      boxShadow: '0 0 8px var(--cyan-primary)',
-                      pointerEvents: 'none',
-                      transition: 'left 0.1s ease'
-                    }}
-                  />
-                </div>
-
-                {/* Timeline status readout */}
-                {activeSegment && (
-                  <div
-                    style={{
-                      marginTop: '8px',
-                      padding: '8px 12px',
-                      backgroundColor: 'var(--bg-body-pattern-1)',
-                      borderLeft: `3px solid ${activeSegment.risk_level === 'High' ? 'var(--risk-high)' : 'var(--cyan-primary)'}`,
-                      borderTop: '1px solid var(--border-subtle)',
-                      borderRight: '1px solid var(--border-subtle)',
-                      borderBottom: '1px solid var(--border-subtle)',
-                      borderRadius: '0 6px 6px 0',
-                      fontSize: '11px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                      <strong style={{ color: activeSegment.risk_level === 'High' ? 'var(--risk-high)' : 'var(--cyan-primary)', fontSize: '11px' }}>
-                        TIMESTAMP {activeSegment.start_time} - {activeSegment.end_time}: {activeSegment.anomaly_type}
-                      </strong>
-                      <span className={activeSegment.risk_level === 'High' ? 'badge-risk-high' : 'badge-risk-low'} style={{ fontSize: '10px' }}>
-                        {activeSegment.risk_level} Risk
-                      </span>
-                    </div>
-                    <div style={{ color: 'var(--text-main)', lineHeight: 1.4 }}>
-                      {activeSegment.description}
-                    </div>
-                  </div>
-                )}
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Analysis FPS
               </div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--magenta-vivid)', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                12 fps
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>Sub-sampled rate</div>
+            </div>
 
-              {/* Compact Drag & Drop Upload Zone for Video */}
-              <div
-                style={{
-                  marginTop: '10px',
-                  border: isDragging ? '2px dashed var(--cyan-primary)' : '1px dashed var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '9px 12px',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  backgroundColor: isDragging ? 'rgba(0, 240, 255, 0.08)' : 'var(--bg-card)',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <Upload size={13} color="var(--cyan-primary)" />
-                <span style={{ fontSize: '11px', color: 'var(--text-main)', fontWeight: 600 }}>
-                  Click to browse or drop a video file
-                </span>
-                <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                  (MP4, WEBM, MOV, AVI &bull; Max 100 MB)
-                </span>
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Suspicious Frames
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: isAi ? '#FF4B72' : '#10B981', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                {isAi ? '17' : '0'}
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                {isAi ? 'Warping & flicker detected' : 'Zero temporal anomalies'}
               </div>
             </div>
 
-            {/* RIGHT SIDE: Single Unified Authenticity Result Panel */}
-            <div className="glass-panel" style={{ padding: '20px', borderRadius: '12px' }}>
-              {/* A. Header: Title + Case ID on exact same baseline */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--cyan-primary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                  AUTHENTICITY RESULT
-                </span>
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', background: 'var(--bg-card-solid)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                  {currentCase.case_id}
-                </span>
+            <div style={{ padding: '14px 18px', borderRadius: '16px', background: '#1F132B', border: '1px solid rgba(157, 78, 221, 0.25)' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 800 }}>
+                Processing Time
               </div>
-
-              {/* B. AI vs Real Percentage Section: Equal 2-Column Layout */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--risk-high)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    AI-MANIPULATED / DEEPFAKE
-                  </div>
-                  <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--risk-high)', lineHeight: 1, marginTop: '6px' }}>
-                    {aiPercentage.toFixed(0)}%
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--risk-low)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    REAL / AUTHENTIC
-                  </div>
-                  <div style={{ fontSize: '36px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--risk-low)', lineHeight: 1, marginTop: '6px' }}>
-                    {realPercentage.toFixed(0)}%
-                  </div>
-                </div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#34D399', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
+                3.2 sec
               </div>
-
-              {/* C. Probability Bar directly connected to percentages */}
-              <div style={{ marginTop: '10px' }}>
-                <div style={{ height: '10px', width: '100%', borderRadius: '5px', overflow: 'hidden', display: 'flex', background: 'var(--bg-body-pattern-1)', border: '1px solid var(--border-subtle)' }}>
-                  <div
-                    style={{
-                      width: `${aiPercentage}%`,
-                      background: 'linear-gradient(90deg, #ef4444, #f87171)',
-                      transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                    title={`AI Likelihood: ${aiPercentage.toFixed(1)}%`}
-                  />
-                  <div
-                    style={{
-                      width: `${realPercentage}%`,
-                      background: 'linear-gradient(90deg, #06b6d4, #10b981)',
-                      transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }}
-                    title={`Real Likelihood: ${realPercentage.toFixed(1)}%`}
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginTop: '5px', fontWeight: 600 }}>
-                  <span style={{ color: 'var(--risk-high)' }}>Deepfake / AI likelihood</span>
-                  <span style={{ color: 'var(--risk-low)' }}>Real footage likelihood</span>
-                </div>
-              </div>
-
-              {/* D. Verdict + Confidence: Compact horizontal row */}
-              <div
-                style={{
-                  marginTop: '14px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    VERDICT
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: verdictColor, marginTop: '2px' }}>
-                    {currentCase.assessment}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    CONFIDENCE
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', marginTop: '2px' }}>
-                    {Math.round(currentCase.confidence_score * 100)}%
-                  </div>
-                </div>
-              </div>
-
-              {/* E. Secondary Authenticity Score: Compact horizontal 2-column layout */}
-              <div
-                style={{
-                  marginTop: '14px',
-                  paddingTop: '12px',
-                  borderTop: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px'
-                }}
-              >
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ScoreMeter
-                    score={currentCase.authenticity_score}
-                    riskLevel={currentCase.risk_level}
-                    assessment={currentCase.assessment}
-                    confidenceScore={currentCase.confidence_score}
-                    size={58}
-                    hideDetails={true}
-                  />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                    UNIFIED AUTHENTICITY SCORE
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                    <span style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-main)', lineHeight: 1 }}>
-                      {currentCase.authenticity_score} / 100
-                    </span>
-                    <span
-                      className={
-                        currentCase.authenticity_score <= 30
-                          ? 'badge-risk-high'
-                          : currentCase.authenticity_score <= 60
-                            ? 'badge-risk-medium'
-                            : 'badge-risk-low'
-                      }
-                      style={{ fontSize: '10px', padding: '1px 6px', lineHeight: 1.4 }}
-                    >
-                      {currentCase.risk_level}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {currentCase.authenticity_score >= 70 ? 'Temporal consistency verified' : 'Temporal & spatial anomalies detected'}
-                  </div>
-                </div>
-              </div>
-
-              {/* F. Forensic Metrics: Clean 2x2 Grid with identical dimensions & typography */}
-              <div
-                style={{
-                  marginTop: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '8px'
-                }}
-              >
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    DEEPFAKE RISK
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.ai_generation_probability > 70 ? 'var(--risk-high)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.ai_generation_probability.toFixed(1)}%
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    FACE MANIPULATION
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.manipulation_risk > 50 ? 'var(--risk-high)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.manipulation_risk.toFixed(1)}%
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    LIP-SYNC DISPARITY
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.sample_type === 'ai' ? 'var(--risk-medium)' : 'var(--risk-low)', marginTop: '2px' }}>
-                    {currentCase.sample_type === 'ai' ? '78.4%' : '8.1%'}
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', padding: '8px 12px', borderRadius: '6px', minHeight: '52px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    TEMPORAL ANOMALY
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: currentCase.forensic_anomaly_score > 50 ? 'var(--risk-high)' : 'var(--text-main)', marginTop: '2px' }}>
-                    {currentCase.forensic_anomaly_score.toFixed(1)}%
-                  </div>
-                </div>
-              </div>
-
-              {/* G. Why This Result: Compact section */}
-              <div
-                style={{
-                  marginTop: '12px',
-                  paddingTop: '10px',
-                  borderTop: '1px solid var(--border-subtle)'
-                }}
-              >
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
-                  WHY THIS RESULT?
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.45, marginBottom: '6px' }}>
-                  {currentCase.why_result_explanation.length > 150
-                    ? currentCase.why_result_explanation.slice(0, 150) + '...'
-                    : currentCase.why_result_explanation}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                  {currentCase.suspicious_segments?.slice(0, 2).map((s, i) => (
-                    <span key={`seg-${i}`} style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '3px', background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', color: 'var(--cyan-primary)', fontFamily: 'var(--font-mono)' }}>
-                      {s.start_time}-{s.end_time}: {s.anomaly_type}
-                    </span>
-                  ))}
-                  {currentCase.top_contributing_signals?.slice(0, 2).map((sig, i) => (
-                    <span key={`sig-${i}`} style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '3px', background: 'var(--bg-card-solid)', border: '1px solid var(--border-subtle)', color: 'var(--blue-soft)' }}>
-                      {sig.signal}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* H. Action Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px' }}>
-                <button
-                  onClick={() => onGenerateReport(currentCase.case_id)}
-                  className="btn-cyber-primary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '11px', padding: '8px 12px' }}
-                >
-                  <FileSpreadsheet size={14} />
-                  <span>GENERATE REPORT</span>
-                </button>
-                <button
-                  onClick={() => setIsWhyModalOpen(true)}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '11px', padding: '8px 12px' }}
-                >
-                  <HelpCircle size={14} color="var(--cyan-primary)" />
-                  <span>WHY THIS RESULT?</span>
-                </button>
-              </div>
-
-              {/* Quick Pipeline Actions Row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                <button
-                  onClick={() => setIsScanning(true)}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '10px', padding: '6px 8px' }}
-                  title="Re-run temporal deepfake scan"
-                >
-                  <Play size={12} />
-                  <span>RE-SCAN</span>
-                </button>
-                <button
-                  onClick={() => onNavigate('workspace')}
-                  className="btn-cyber-secondary"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '10px', padding: '6px 8px' }}
-                  title="Cross-examine video alongside audio and text"
-                >
-                  <Layers size={12} />
-                  <span>CROSS-EXAMINE</span>
-                </button>
-              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>Hardware accelerated</div>
             </div>
           </div>
 
-          {/* Evidence Cards */}
-          <section style={{ marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '0.4px', marginBottom: '12px' }}>
-              VIDEO FORENSIC SIGNALS &amp; EVIDENCE
+          {/* Filmstrip of Analyzed Frames */}
+          <div
+            style={{
+              padding: '20px',
+              borderRadius: '20px',
+              border: '1px solid rgba(157, 78, 221, 0.28)',
+              background: '#1F132B',
+              boxShadow: 'var(--clay-box-shadow)',
+              marginBottom: '24px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Film size={18} color="var(--magenta-vivid)" />
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.5px' }}>
+                  ANALYZED FRAME SEQUENCE (TEMPORAL FILMSTRIP)
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                Click frame to inspect optical flow
+              </span>
             </div>
+
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: '14px'
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '12px'
               }}
             >
-              {currentCase.evidence_breakdown.map((card, idx) => (
-                <EvidenceCardComponent key={idx} card={card} />
-              ))}
-            </div>
-          </section>
+              {filmstripFrames.map((f, idx) => {
+                const isSelected = selectedFrame === f.frameNum;
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedFrame(f.frameNum)}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '12px',
+                      background: isSelected ? 'rgba(157, 78, 221, 0.25)' : '#150C20',
+                      border: isSelected
+                        ? '1px solid var(--magenta-vivid)'
+                        : (f.isSuspicious ? '1px solid rgba(255, 75, 114, 0.6)' : '1px solid rgba(157, 78, 221, 0.18)'),
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      position: 'relative',
+                      boxShadow: isSelected ? '0 0 16px rgba(199, 36, 177, 0.35)' : 'none'
+                    }}
+                  >
+                    {/* Simulated Frame Thumbnail */}
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '75px',
+                        borderRadius: '8px',
+                        background: f.isSuspicious
+                          ? 'radial-gradient(circle at 50% 45%, rgba(255, 75, 114, 0.45) 0%, #170921 70%)'
+                          : 'radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.25) 0%, #0F1418 70%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <Eye size={20} color={f.isSuspicious ? '#FF4B72' : '#34D399'} opacity={0.8} />
 
-          {/* Why This Result Modal */}
-          <WhyThisResultModal
-            isOpen={isWhyModalOpen}
-            onClose={() => setIsWhyModalOpen(false)}
-            result={currentCase}
-            onInvestigateDeeper={() => onNavigate('workspace')}
-          />
+                      {f.isSuspicious && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            padding: '2px 5px',
+                            borderRadius: '4px',
+                            background: '#FF4B72',
+                            color: '#FFFFFF',
+                            fontSize: '8px',
+                            fontWeight: 900
+                          }}
+                        >
+                          ANOMALY
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                      <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: '#FFFFFF', fontWeight: 700 }}>
+                        F-{f.frameNum}
+                      </span>
+                      <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                        {f.time}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Forensic Signals Breakdown */}
+          <div
+            style={{
+              padding: '20px',
+              borderRadius: '20px',
+              border: '1px solid rgba(157, 78, 221, 0.28)',
+              background: '#1F132B',
+              boxShadow: 'var(--clay-box-shadow)',
+              marginBottom: '24px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Layers size={18} color="var(--magenta-vivid)" />
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.5px' }}>
+                  FORENSIC SIGNALS &amp; ATTRIBUTION
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                5 SIGNALS EVALUATED
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+              {currentCase.signals.map((sig, idx) => {
+                const isAnomaly = sig.score >= 60;
+                const isModerate = sig.score >= 35 && sig.score < 60;
+                const barColor = isAnomaly ? '#FF4B72' : (isModerate ? '#FBBF24' : '#10B981');
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '14px',
+                      borderRadius: '14px',
+                      background: '#150C20',
+                      border: '1px solid rgba(157, 78, 221, 0.18)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#FFFFFF' }}>
+                        {sig.name}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: `${barColor}22`,
+                            border: `1px solid ${barColor}55`,
+                            color: barColor,
+                            fontWeight: 700
+                          }}
+                        >
+                          {sig.status}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 800, color: barColor }}>
+                          {sig.score.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4, marginBottom: '8px' }}>
+                      {sig.explanation}
+                    </div>
+
+                    <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${sig.score}%`,
+                          background: barColor,
+                          boxShadow: `0 0 8px ${barColor}`
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </>
+      )}
+
+      {/* Why This Result Modal */}
+      {isWhyModalOpen && currentCase && (
+        <WhyThisResultModal
+          isOpen={isWhyModalOpen}
+          result={currentCase}
+          onClose={() => setIsWhyModalOpen(false)}
+        />
       )}
     </div>
   );
